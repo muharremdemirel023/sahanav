@@ -1,4 +1,2 @@
-import { config } from 'dotenv';
-config();
-
-import '@/ai/flows/address-parser-flow.ts';
+// AI development entry point removed.
+export {};
