@@ -3,13 +3,13 @@ import type { ParsedAddress } from '@/types/address';
 
 /**
  * Parses a single line of text into an address object using client-side logic.
- * No external API or AI calls are made.
+ * Specifically refined to isolate Street and Door Number for Google Maps.
  */
 export function parseAddressLine(line: string): ParsedAddress | null {
   const upperLine = line.toUpperCase().trim();
   if (!upperLine) return null;
 
-  // 1. Detect District (from predefined list)
+  // 1. Detect District
   let detectedDistrict = 'DİĞER';
   for (const district of SUPPORTED_DISTRICTS) {
     if (upperLine.includes(district)) {
@@ -18,22 +18,25 @@ export function parseAddressLine(line: string): ParsedAddress | null {
     }
   }
 
-  // 2. Detect Neighborhood (Regex-based search for "MAH." variants)
-  const neighborhoodRegex = /([A-ZÇĞİÖŞÜ\s0-9]+)\s+(MAH|MAH\.|MAHALLESİ|MAHALLESI)/;
+  // 2. Detect Neighborhood (for UI display)
+  const neighborhoodRegex = /([A-ZÇĞİÖŞÜ0-9\s]+)\s+(MAH|MAH\.|MAHALLESİ|MAHALLESI)/;
   const neighborhoodMatch = upperLine.match(neighborhoodRegex);
   let neighborhood = neighborhoodMatch ? neighborhoodMatch[1].trim() : 'BİLİNMEYEN';
-
-  // 3. Extract Street/No for Google Maps query
-  // Looks for common abbreviations: CAD, CADDE, CD, SOK, SOKAK, SK
-  const streetRegex = /(?:([A-ZÇĞİÖŞÜ\s0-9]+)\s+(?:CAD|CADDE|CD|SOK|SOKAK|SK)\.?)\s*(?:NO|NO:|N)?\s*(\d+)?/i;
-  const streetMatch = line.match(streetRegex);
+  
+  // 3. Extract Street and Door Number for Google Maps
+  // This regex targets 1-2 words before the street keyword (CAD/SOK/SK), 
+  // and captures the door number after optional NO/NO: markers.
+  const streetRegex = /((?:[A-ZÇĞİÖŞÜ0-9]+\s+){1,2}(?:CAD|CADDE|CD|SOK|SOKAK|SK)\.?)\s*(?:NO|NO:|N)?\s*(\d+)?/i;
+  const streetMatch = upperLine.match(streetRegex);
   
   let streetQuery = '';
   if (streetMatch) {
-    streetQuery = `${streetMatch[0].trim()}`;
+    const streetPart = streetMatch[1].trim();
+    const doorNo = streetMatch[2] ? `NO:${streetMatch[2]}` : '';
+    streetQuery = `${streetPart} ${doorNo}`.trim();
   } else {
-    // Fallback: take part before district name if specific street indicators aren't found
-    streetQuery = line.split(detectedDistrict)[0].trim();
+    // Fallback: Use the part before the district if specific keywords aren't isolated
+    streetQuery = upperLine.split(detectedDistrict)[0].trim();
   }
 
   // 4. Extract business name (heuristic: assumes it's at the start)

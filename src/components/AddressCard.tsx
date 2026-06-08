@@ -13,8 +13,10 @@ interface AddressCardProps {
 
 export default function AddressCard({ address }: AddressCardProps) {
   const openInMaps = () => {
-    // Precise query: Street/No + District + Istanbul
-    const query = `${address.streetQuery} ${address.district} İstanbul`.trim();
+    // Construct query: [Street/Cadde/Sokak + NO] + [District] + İstanbul
+    // address.streetQuery already isolated the street and number in parser.ts
+    const districtPart = address.district !== 'DİĞER' ? address.district : '';
+    const query = `${address.streetQuery} ${districtPart} İSTANBUL`.replace(/\s+/g, ' ').trim();
     const encoded = encodeURIComponent(query);
     const url = `https://www.google.com/maps/search/?api=1&query=${encoded}`;
     window.open(url, "_blank");
@@ -39,10 +41,10 @@ export default function AddressCard({ address }: AddressCardProps) {
       <div className="space-y-2">
         <div className="flex items-start gap-2 text-sm text-muted-foreground">
           <MapPin className="w-4 h-4 mt-1 shrink-0 text-accent" />
-          <p className="leading-relaxed">
+          <div className="leading-relaxed">
             <span className="font-bold text-foreground block mb-0.5">{address.neighborhood} Mah.</span>
-            {address.fullAddress}
-          </p>
+            <p className="text-xs break-words">{address.fullAddress}</p>
+          </div>
         </div>
       </div>
 
