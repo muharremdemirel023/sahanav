@@ -1,0 +1,16 @@
+export const SUPPORTED_DISTRICTS = [
+  'SANCAKTEPE',
+  'ÜMRANİYE',
+  'ATAŞEHİR',
+  'KARTAL',
+  'PENDİK',
+  'MALTEPE',
+  'KADIKÖY',
+  'BAĞCILAR',
+  'ESENLER',
+  'SULTANBEYLİ',
+  'ÇEKMEKÖY',
+  'ÜSKÜDAR',
+  'BEYKOZ',
+  'TUZLA',
+];
