@@ -63,7 +63,7 @@ export default function SahaNav() {
     return groupAddressesByNeighborhood(filteredAddresses);
   }, [filteredAddresses]);
 
-  // Stats
+  // İstatistikler
   const stats = useMemo(() => {
     const total = filteredAddresses.length;
     const visited = filteredAddresses.filter(a => a.visited).length;
@@ -81,19 +81,19 @@ export default function SahaNav() {
         </div>
         <div className="max-w-4xl mx-auto relative z-10">
           <div className="flex items-center gap-3 mb-2">
-            <div className="bg-white p-2 rounded-xl">
+            <div className="bg-white p-2 rounded-xl shadow-lg">
                <MapPin className="w-8 h-8 text-primary" />
             </div>
             <h1 className="text-4xl font-headline font-black tracking-tight">SahaNav</h1>
           </div>
-          <h2 className="text-xl font-medium opacity-90 mb-6">Adres Gruplandırma ve Navigasyon</h2>
+          <h2 className="text-xl font-medium opacity-90 mb-6 font-headline">Adres Gruplandırma ve Navigasyon</h2>
           <p className="text-primary-foreground/80 max-w-lg font-medium leading-relaxed">
             Adreslerinizi mahalle bazlı otomatik gruplandırın ve Google Haritalar rotanızı hızlıca planlayın.
           </p>
         </div>
       </header>
 
-      <div className="max-w-4xl mx-auto px-6 -mt-8 space-y-6">
+      <div className="max-w-4xl mx-auto px-6 -mt-8 space-y-6 relative z-20">
         {/* Upload Section */}
         {addresses.length === 0 ? (
           <FileUploader onDataLoaded={handleDataLoaded} />
@@ -115,7 +115,7 @@ export default function SahaNav() {
               }}
             />
 
-            {/* Stats Bar */}
+            {/* İstatistik Çubuğu */}
             <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
               <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 border-b border-border">
                 <div className="p-4 flex flex-col items-center justify-center bg-primary/5">
@@ -156,7 +156,7 @@ export default function SahaNav() {
               </div>
             </div>
 
-            {/* Results Accordion */}
+            {/* Mahalle Grupları */}
             {filteredAddresses.length > 0 ? (
               <Accordion type="multiple" className="space-y-4">
                 {Object.entries(groupedAddresses).map(([neighborhood, list]) => {

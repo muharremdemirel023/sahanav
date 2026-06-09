@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useState } from "react";
-import { Upload, FileText, AlertCircle } from "lucide-react";
+import { Upload } from "lucide-react";
 import { parseAddressLine, deduplicateAddresses } from "@/lib/parser";
 import type { ParsedAddress } from "@/types/address";
 import { useToast } from "@/hooks/use-toast";
@@ -18,7 +18,8 @@ export default function FileUploader({ onDataLoaded }: FileUploaderProps) {
   const { toast } = useToast();
 
   const processFile = async (file: File) => {
-    if (file.type !== "text/plain" && !file.name.endsWith(".txt")) {
+    // Sadece uzantı kontrolü yapmak daha güvenlidir, çünkü MIME tipi her zaman "text/plain" gelmeyebilir
+    if (!file.name.toLowerCase().endsWith(".txt")) {
       toast({
         variant: "destructive",
         title: "Hata",
@@ -42,6 +43,16 @@ export default function FileUploader({ onDataLoaded }: FileUploaderProps) {
         }
 
         const cleanResults = deduplicateAddresses(results);
+        
+        if (cleanResults.length === 0) {
+          toast({
+            variant: "destructive",
+            title: "Uyarı",
+            description: "Dosya içerisinde geçerli bir adres bulunamadı.",
+          });
+          return;
+        }
+
         onDataLoaded(cleanResults);
         
         toast({
@@ -86,7 +97,7 @@ export default function FileUploader({ onDataLoaded }: FileUploaderProps) {
 
   return (
     <Card
-      className={`relative border-2 border-dashed transition-all duration-200 p-8 text-center ${
+      className={`relative border-2 border-dashed transition-all duration-200 p-8 text-center min-h-[300px] flex flex-col items-center justify-center ${
         isDragging
           ? "border-primary bg-primary/5"
           : "border-muted-foreground/20 hover:border-primary/50"
@@ -95,15 +106,16 @@ export default function FileUploader({ onDataLoaded }: FileUploaderProps) {
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
+      {/* Input her zaman en üstte (z-20) olmalı ki tıklamaları yakalasın */}
       <input
         type="file"
         accept=".txt"
         onChange={handleFileChange}
-        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
         disabled={loading}
       />
       
-      <div className="flex flex-col items-center gap-4">
+      <div className="flex flex-col items-center gap-4 relative z-10 pointer-events-none">
         <div className="p-4 bg-primary/10 rounded-full">
           <Upload className="w-8 h-8 text-primary" />
         </div>
@@ -113,13 +125,13 @@ export default function FileUploader({ onDataLoaded }: FileUploaderProps) {
             TXT dosyanızı sürükleyip bırakın veya seçmek için tıklayın.
           </p>
         </div>
-        <Button variant="outline" className="mt-2 pointer-events-none">
+        <Button variant="outline" className="mt-2">
           Dosya Seç
         </Button>
       </div>
       
       {loading && (
-        <div className="absolute inset-0 bg-background/80 flex items-center justify-center rounded-lg z-10">
+        <div className="absolute inset-0 bg-background/80 flex items-center justify-center rounded-lg z-30">
           <div className="flex flex-col items-center gap-2">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
             <p className="text-sm font-medium">İşleniyor...</p>
