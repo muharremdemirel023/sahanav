@@ -30,37 +30,38 @@ export default function AddressCard({ address, onToggleVisited }: AddressCardPro
           : "hover:shadow-md bg-card"
       )}
     >
-      <div className="flex justify-between items-start gap-3">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <Checkbox 
-              id={`visited-${address.id}`}
-              checked={address.visited}
-              onCheckedChange={() => onToggleVisited(address.id)}
-              className="w-5 h-5 border-2"
-            />
-          </div>
-          <div className="flex items-center gap-2">
+      {/* Header Section with Overlap Protection */}
+      <div className="flex justify-between items-start gap-3 w-full">
+        <div className="flex items-center gap-3 flex-1 min-w-0">
+          <Checkbox 
+            id={`visited-${address.id}`}
+            checked={address.visited}
+            onCheckedChange={() => onToggleVisited(address.id)}
+            className="w-5 h-5 border-2 shrink-0"
+          />
+          <div className="flex items-center gap-2 min-w-0 flex-1">
             <div className={cn(
-              "p-2 rounded-lg transition-colors",
+              "p-2 rounded-lg shrink-0 transition-colors",
               address.visited ? "bg-destructive/10 text-destructive" : "bg-primary/5 text-primary"
             )}>
               <Building2 className="w-5 h-5" />
             </div>
             <h4 className={cn(
-              "font-headline font-bold text-lg line-clamp-2 leading-tight",
+              "font-headline font-bold text-lg line-clamp-2 leading-tight flex-1 min-w-0",
               address.visited && "text-destructive/90"
             )}>
               {address.businessName}
             </h4>
           </div>
         </div>
-        <div className="flex flex-col items-end gap-2">
+
+        {/* Badges Container - Forced to stay on the right and not shrink */}
+        <div className="flex flex-col items-end gap-2 shrink-0 ml-1">
           <Badge variant="secondary" className="whitespace-nowrap bg-secondary/50 text-secondary-foreground font-semibold">
             {address.district}
           </Badge>
           {address.visited && (
-            <Badge className="bg-destructive text-destructive-foreground border-none font-bold animate-in fade-in zoom-in duration-300">
+            <Badge className="bg-destructive text-destructive-foreground border-none font-bold animate-in fade-in zoom-in duration-300 whitespace-nowrap">
               <CheckCircle2 className="w-3 h-3 mr-1" />
               Gidildi
             </Badge>
@@ -74,7 +75,7 @@ export default function AddressCard({ address, onToggleVisited }: AddressCardPro
             "w-4 h-4 mt-1 shrink-0",
             address.visited ? "text-destructive/60" : "text-accent"
           )} />
-          <div className="leading-relaxed">
+          <div className="leading-relaxed min-w-0 flex-1">
             <span className={cn(
               "font-bold block mb-0.5",
               address.visited ? "text-destructive/80" : "text-foreground"
