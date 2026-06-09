@@ -6,4 +6,7 @@ export interface ParsedAddress {
   neighborhood: string;
   streetQuery: string;
   visited: boolean;
+  lat?: number;
+  lng?: number;
+  distance?: number;
 }
