@@ -2,6 +2,16 @@ import { SUPPORTED_DISTRICTS } from './constants';
 import type { ParsedAddress } from '@/types/address';
 
 /**
+ * Generates a unique ID with a fallback for non-secure contexts.
+ */
+function generateId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+}
+
+/**
  * Parses a single line of text into an address object using client-side logic.
  * Specifically refined to isolate Street and Door Number for Google Maps.
  */
@@ -43,7 +53,7 @@ export function parseAddressLine(line: string): ParsedAddress | null {
   const businessName = line.split(/(?:CAD|SOK|MAH|NO)/i)[0].trim() || 'İşletme Adı Yok';
 
   return {
-    id: crypto.randomUUID(),
+    id: generateId(),
     businessName,
     fullAddress: line,
     district: detectedDistrict,
