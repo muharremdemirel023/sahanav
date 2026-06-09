@@ -1,13 +1,16 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { MapPin, Filter, Search, Trash2, LayoutGrid, List } from "lucide-react";
+import { MapPin, Filter, Search, Trash2, LayoutGrid, List, Layers } from "lucide-react";
 import FileUploader from "@/components/FileUploader";
 import FilterBar from "@/components/FilterBar";
 import AddressCard from "@/components/AddressCard";
 import type { ParsedAddress } from "@/types/address";
+import { groupAddressesByNeighborhood } from "@/lib/parser";
 import { Toaster } from "@/components/ui/toaster";
 import { Button } from "@/components/ui/button";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Badge } from "@/components/ui/badge";
 
 export default function SahaNav() {
   const [addresses, setAddresses] = useState<ParsedAddress[]>([]);
@@ -31,7 +34,7 @@ export default function SahaNav() {
     return Array.from(set).sort();
   }, [addresses]);
 
-  const neighborhoods = useMemo(() => {
+  const neighborhoodsForFilter = useMemo(() => {
     const filteredByDistrict =
       selectedDistrict === "all"
         ? addresses
@@ -49,6 +52,12 @@ export default function SahaNav() {
     });
   }, [addresses, selectedDistrict, selectedNeighborhood]);
 
+  const groupedAddresses = useMemo(() => {
+    return groupAddressesByNeighborhood(filteredAddresses);
+  }, [filteredAddresses]);
+
+  const totalNeighborhoods = Object.keys(groupedAddresses).length;
+
   return (
     <main className="min-h-screen bg-background font-body pb-12">
       {/* Header */}
@@ -63,9 +72,9 @@ export default function SahaNav() {
             </div>
             <h1 className="text-4xl font-headline font-black tracking-tight">SahaNav</h1>
           </div>
-          <h2 className="text-xl font-medium opacity-90 mb-6">Adres Filtreleme</h2>
+          <h2 className="text-xl font-medium opacity-90 mb-6">Adres Gruplandırma ve Navigasyon</h2>
           <p className="text-primary-foreground/80 max-w-lg font-medium leading-relaxed">
-            TXT dosyanı yükle, ilçe ve mahalleye göre adresleri anında filtreleyip Google Haritalar ile rota oluştur.
+            Adreslerinizi mahalle bazlı otomatik gruplandırın ve Google Haritalar rotanızı hızlıca planlayın.
           </p>
         </div>
       </header>
@@ -78,7 +87,7 @@ export default function SahaNav() {
           <div className="space-y-6">
             <FilterBar
               districts={districts}
-              neighborhoods={neighborhoods}
+              neighborhoods={neighborhoodsForFilter}
               selectedDistrict={selectedDistrict}
               selectedNeighborhood={selectedNeighborhood}
               onDistrictChange={(val) => {
@@ -92,32 +101,60 @@ export default function SahaNav() {
               }}
             />
 
-            <div className="flex items-center justify-between py-2 border-b border-border">
-              <div className="flex items-center gap-2">
-                <Search className="w-5 h-5 text-muted-foreground" />
-                <span className="font-bold text-lg">
-                  {filteredAddresses.length}{" "}
-                  <span className="font-normal text-muted-foreground">adres bulundu</span>
-                </span>
+            {/* Stats Bar */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between p-4 bg-card rounded-xl border border-border shadow-sm gap-4">
+              <div className="flex items-center gap-6">
+                <div className="flex flex-col">
+                  <span className="text-xs font-bold text-muted-foreground uppercase">Toplam Adres</span>
+                  <span className="text-2xl font-black text-primary">{filteredAddresses.length}</span>
+                </div>
+                <div className="w-px h-10 bg-border hidden md:block" />
+                <div className="flex flex-col">
+                  <span className="text-xs font-bold text-muted-foreground uppercase">Toplam Mahalle</span>
+                  <span className="text-2xl font-black text-accent">{totalNeighborhoods}</span>
+                </div>
               </div>
               <Button 
                 variant="destructive" 
                 size="sm" 
                 onClick={clearData}
-                className="rounded-lg gap-2"
+                className="rounded-lg gap-2 self-end md:self-center"
               >
                 <Trash2 className="w-4 h-4" />
                 Listeyi Temizle
               </Button>
             </div>
 
-            {/* Results Grid */}
+            {/* Results Accordion */}
             {filteredAddresses.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {filteredAddresses.map((addr) => (
-                  <AddressCard key={addr.id} address={addr} />
+              <Accordion type="multiple" className="space-y-4">
+                {Object.entries(groupedAddresses).map(([neighborhood, list]) => (
+                  <AccordionItem 
+                    key={neighborhood} 
+                    value={neighborhood} 
+                    className="border bg-card rounded-xl overflow-hidden px-4 shadow-sm"
+                  >
+                    <AccordionTrigger className="hover:no-underline py-4">
+                      <div className="flex items-center gap-3 text-left">
+                        <Layers className="w-5 h-5 text-accent shrink-0" />
+                        <span className="font-headline font-bold text-lg">
+                          {neighborhood}
+                        </span>
+                        <Badge variant="secondary" className="bg-primary/10 text-primary border-none font-bold">
+                          {list.length} adres
+                        </Badge>
+                      </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="pb-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                        {list.map((addr) => (
+                          <AddressCard key={addr.id} address={addr} />
+                        ))}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
                 ))}
-              </div>
+              </Accordion>
             ) : (
               <div className="bg-card p-12 text-center rounded-xl border border-dashed border-muted-foreground/30">
                 <Filter className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />

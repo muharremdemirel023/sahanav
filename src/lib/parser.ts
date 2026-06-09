@@ -12,8 +12,38 @@ function generateId(): string {
 }
 
 /**
- * Parses a single line of text into an address object using client-side logic.
- * Specifically refined to isolate Street and Door Number for Google Maps.
+ * Extracts neighborhood name from a given address line using flexible regex.
+ * Rule: /([A-ZÇĞİÖŞÜ0-9\s]+)\s+MAH\.?/i
+ */
+export function extractNeighborhood(addressLine: string): string | null {
+  const neighborhoodRegex = /([A-ZÇĞİÖŞÜ0-9\s]+)\s+MAH\.?/i;
+  const match = addressLine.match(neighborhoodRegex);
+  if (match && match[1]) {
+    return match[1].trim().toUpperCase();
+  }
+  return null;
+}
+
+/**
+ * Groups ParsedAddress objects by neighborhood.
+ */
+export function groupAddressesByNeighborhood(addresses: ParsedAddress[]): Record<string, ParsedAddress[]> {
+  const groups: Record<string, ParsedAddress[]> = {};
+  const UNKNOWN_GROUP = "Mahalle Tespit Edilemeyenler";
+
+  addresses.forEach((addr) => {
+    const neighborhood = addr.neighborhood !== 'BİLİNMEYEN' ? `${addr.neighborhood} MAH.` : UNKNOWN_GROUP;
+    if (!groups[neighborhood]) {
+      groups[neighborhood] = [];
+    }
+    groups[neighborhood].push(addr);
+  });
+
+  return groups;
+}
+
+/**
+ * Parses a single line of text into an address object.
  */
 export function parseAddressLine(line: string): ParsedAddress | null {
   const upperLine = line.toUpperCase().trim();
@@ -28,14 +58,10 @@ export function parseAddressLine(line: string): ParsedAddress | null {
     }
   }
 
-  // 2. Detect Neighborhood (for UI display)
-  const neighborhoodRegex = /([A-ZÇĞİÖŞÜ0-9\s]+)\s+(MAH|MAH\.|MAHALLESİ|MAHALLESI)/;
-  const neighborhoodMatch = upperLine.match(neighborhoodRegex);
-  let neighborhood = neighborhoodMatch ? neighborhoodMatch[1].trim() : 'BİLİNMEYEN';
+  // 2. Detect Neighborhood using the new helper
+  const neighborhood = extractNeighborhood(line) || 'BİLİNMEYEN';
   
   // 3. Extract Street and Door Number for Google Maps
-  // This regex targets 1-2 words before the street keyword (CAD/SOK/SK), 
-  // and captures the door number after optional NO/NO: markers.
   const streetRegex = /((?:[A-ZÇĞİÖŞÜ0-9]+\s+){1,2}(?:CAD|CADDE|CD|SOK|SOKAK|SK)\.?)\s*(?:NO|NO:|N)?\s*(\d+)?/i;
   const streetMatch = upperLine.match(streetRegex);
   
@@ -45,11 +71,9 @@ export function parseAddressLine(line: string): ParsedAddress | null {
     const doorNo = streetMatch[2] ? `NO:${streetMatch[2]}` : '';
     streetQuery = `${streetPart} ${doorNo}`.trim();
   } else {
-    // Fallback: Use the part before the district if specific keywords aren't isolated
     streetQuery = upperLine.split(detectedDistrict)[0].trim();
   }
 
-  // 4. Extract business name (heuristic: assumes it's at the start)
   const businessName = line.split(/(?:CAD|SOK|MAH|NO)/i)[0].trim() || 'İşletme Adı Yok';
 
   return {
@@ -63,7 +87,7 @@ export function parseAddressLine(line: string): ParsedAddress | null {
 }
 
 /**
- * Removes duplicate address entries based on business name and full address string.
+ * Removes duplicate address entries.
  */
 export function deduplicateAddresses(addresses: ParsedAddress[]): ParsedAddress[] {
   const seen = new Set<string>();
