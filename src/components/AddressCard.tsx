@@ -13,11 +13,9 @@ interface AddressCardProps {
 
 export default function AddressCard({ address }: AddressCardProps) {
   const openInMaps = () => {
-    // Construct query: [Street/Cadde/Sokak + NO] + [District] + İstanbul
-    // address.streetQuery already isolated the street and number in parser.ts
-    const districtPart = address.district !== 'DİĞER' ? address.district : '';
-    const query = `${address.streetQuery} ${districtPart} İSTANBUL`.replace(/\s+/g, ' ').trim();
-    const encoded = encodeURIComponent(query);
+    // Uses the pre-calculated optimized streetQuery from parser.ts
+    // which follows: [Street/Ave] [DoorNo] [District] ISTANBUL
+    const encoded = encodeURIComponent(address.streetQuery);
     const url = `https://www.google.com/maps/search/?api=1&query=${encoded}`;
     window.open(url, "_blank");
   };
