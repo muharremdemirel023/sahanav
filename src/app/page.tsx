@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import { MapPin, Filter, Search, Trash2, LayoutGrid, List, Layers } from "lucide-react";
+import { MapPin, Filter, Trash2, Layers, CheckCircle, Clock, ListChecks } from "lucide-react";
 import FileUploader from "@/components/FileUploader";
 import FilterBar from "@/components/FilterBar";
 import AddressCard from "@/components/AddressCard";
@@ -27,6 +27,12 @@ export default function SahaNav() {
     setAddresses([]);
     setSelectedDistrict("all");
     setSelectedNeighborhood("all");
+  };
+
+  const toggleVisited = (id: string) => {
+    setAddresses(prev => prev.map(addr => 
+      addr.id === id ? { ...addr, visited: !addr.visited } : addr
+    ));
   };
 
   const districts = useMemo(() => {
@@ -56,7 +62,14 @@ export default function SahaNav() {
     return groupAddressesByNeighborhood(filteredAddresses);
   }, [filteredAddresses]);
 
-  const totalNeighborhoods = Object.keys(groupedAddresses).length;
+  // Stats
+  const stats = useMemo(() => {
+    const total = filteredAddresses.length;
+    const visited = filteredAddresses.filter(a => a.visited).length;
+    const remaining = total - visited;
+    const totalNeighborhoods = Object.keys(groupedAddresses).length;
+    return { total, visited, remaining, totalNeighborhoods };
+  }, [filteredAddresses, groupedAddresses]);
 
   return (
     <main className="min-h-screen bg-background font-body pb-12">
@@ -102,58 +115,105 @@ export default function SahaNav() {
             />
 
             {/* Stats Bar */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between p-4 bg-card rounded-xl border border-border shadow-sm gap-4">
-              <div className="flex items-center gap-6">
-                <div className="flex flex-col">
-                  <span className="text-xs font-bold text-muted-foreground uppercase">Toplam Adres</span>
-                  <span className="text-2xl font-black text-primary">{filteredAddresses.length}</span>
+            <div className="bg-card rounded-xl border border-border shadow-sm overflow-hidden">
+              <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 border-b border-border">
+                <div className="p-4 flex flex-col items-center justify-center bg-primary/5">
+                  <span className="text-[10px] font-black text-primary uppercase tracking-widest mb-1 flex items-center gap-1">
+                    <ListChecks className="w-3 h-3" /> Toplam
+                  </span>
+                  <span className="text-2xl font-black text-primary">{stats.total}</span>
                 </div>
-                <div className="w-px h-10 bg-border hidden md:block" />
-                <div className="flex flex-col">
-                  <span className="text-xs font-bold text-muted-foreground uppercase">Toplam Mahalle</span>
-                  <span className="text-2xl font-black text-accent">{totalNeighborhoods}</span>
+                <div className="p-4 flex flex-col items-center justify-center bg-green-500/5">
+                  <span className="text-[10px] font-black text-green-600 uppercase tracking-widest mb-1 flex items-center gap-1">
+                    <CheckCircle className="w-3 h-3" /> Gidilen
+                  </span>
+                  <span className="text-2xl font-black text-green-600">{stats.visited}</span>
+                </div>
+                <div className="p-4 flex flex-col items-center justify-center bg-orange-500/5">
+                  <span className="text-[10px] font-black text-orange-600 uppercase tracking-widest mb-1 flex items-center gap-1">
+                    <Clock className="w-3 h-3" /> Kalan
+                  </span>
+                  <span className="text-2xl font-black text-orange-600">{stats.remaining}</span>
+                </div>
+                <div className="p-4 flex flex-col items-center justify-center bg-accent/5">
+                  <span className="text-[10px] font-black text-accent uppercase tracking-widest mb-1 flex items-center gap-1">
+                    <Layers className="w-3 h-3" /> Mahalle
+                  </span>
+                  <span className="text-2xl font-black text-accent">{stats.totalNeighborhoods}</span>
                 </div>
               </div>
-              <Button 
-                variant="destructive" 
-                size="sm" 
-                onClick={clearData}
-                className="rounded-lg gap-2 self-end md:self-center"
-              >
-                <Trash2 className="w-4 h-4" />
-                Listeyi Temizle
-              </Button>
+              <div className="p-3 bg-muted/30 flex justify-end">
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  onClick={clearData}
+                  className="text-destructive hover:bg-destructive/10 font-bold gap-2 text-xs h-8"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Tüm Listeyi Temizle
+                </Button>
+              </div>
             </div>
 
             {/* Results Accordion */}
             {filteredAddresses.length > 0 ? (
               <Accordion type="multiple" className="space-y-4">
-                {Object.entries(groupedAddresses).map(([neighborhood, list]) => (
-                  <AccordionItem 
-                    key={neighborhood} 
-                    value={neighborhood} 
-                    className="border bg-card rounded-xl overflow-hidden px-4 shadow-sm"
-                  >
-                    <AccordionTrigger className="hover:no-underline py-4">
-                      <div className="flex items-center gap-3 text-left">
-                        <Layers className="w-5 h-5 text-accent shrink-0" />
-                        <span className="font-headline font-bold text-lg">
-                          {neighborhood}
-                        </span>
-                        <Badge variant="secondary" className="bg-primary/10 text-primary border-none font-bold">
-                          {list.length} adres
-                        </Badge>
-                      </div>
-                    </AccordionTrigger>
-                    <AccordionContent className="pb-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
-                        {list.map((addr) => (
-                          <AddressCard key={addr.id} address={addr} />
-                        ))}
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                ))}
+                {Object.entries(groupedAddresses).map(([neighborhood, list]) => {
+                  const neighborhoodVisitedCount = list.filter(a => a.visited).length;
+                  const isFullyVisited = neighborhoodVisitedCount === list.length && list.length > 0;
+
+                  return (
+                    <AccordionItem 
+                      key={neighborhood} 
+                      value={neighborhood} 
+                      className={cn(
+                        "border bg-card rounded-xl overflow-hidden px-4 shadow-sm transition-colors",
+                        isFullyVisited && "bg-green-500/5 border-green-200"
+                      )}
+                    >
+                      <AccordionTrigger className="hover:no-underline py-4">
+                        <div className="flex items-center gap-3 text-left w-full">
+                          <Layers className={cn(
+                            "w-5 h-5 shrink-0",
+                            isFullyVisited ? "text-green-500" : "text-accent"
+                          )} />
+                          <div className="flex flex-col md:flex-row md:items-center gap-1 md:gap-3 flex-1">
+                            <span className={cn(
+                              "font-headline font-bold text-lg",
+                              isFullyVisited && "text-green-700"
+                            )}>
+                              {neighborhood}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <Badge variant="secondary" className="bg-primary/10 text-primary border-none font-bold text-[10px]">
+                                {list.length} Adres
+                              </Badge>
+                              {neighborhoodVisitedCount > 0 && (
+                                <Badge className={cn(
+                                  "border-none font-bold text-[10px]",
+                                  isFullyVisited ? "bg-green-600" : "bg-orange-500"
+                                )}>
+                                  {neighborhoodVisitedCount}/{list.length} Gidildi
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent className="pb-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                          {list.map((addr) => (
+                            <AddressCard 
+                              key={addr.id} 
+                              address={addr} 
+                              onToggleVisited={toggleVisited}
+                            />
+                          ))}
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  );
+                })}
               </Accordion>
             ) : (
               <div className="bg-card p-12 text-center rounded-xl border border-dashed border-muted-foreground/30">

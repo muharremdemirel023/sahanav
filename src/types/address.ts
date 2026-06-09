@@ -5,4 +5,5 @@ export interface ParsedAddress {
   district: string;
   neighborhood: string;
   streetQuery: string;
+  visited: boolean;
 }

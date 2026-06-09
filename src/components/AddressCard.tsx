@@ -1,54 +1,104 @@
 "use client";
 
 import React from "react";
-import { MapPin, Navigation, Building2 } from "lucide-react";
+import { MapPin, Navigation, Building2, CheckCircle2 } from "lucide-react";
 import type { ParsedAddress } from "@/types/address";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
+import { Checkbox } from "./ui/checkbox";
+import { cn } from "@/lib/utils";
 
 interface AddressCardProps {
   address: ParsedAddress;
+  onToggleVisited: (id: string) => void;
 }
 
-export default function AddressCard({ address }: AddressCardProps) {
+export default function AddressCard({ address, onToggleVisited }: AddressCardProps) {
   const openInMaps = () => {
-    // Uses the pre-calculated optimized streetQuery from parser.ts
-    // which follows: [Street/Ave] [DoorNo] [District] ISTANBUL
     const encoded = encodeURIComponent(address.streetQuery);
     const url = `https://www.google.com/maps/search/?api=1&query=${encoded}`;
     window.open(url, "_blank");
   };
 
   return (
-    <Card className="p-5 flex flex-col gap-4 hover:shadow-md transition-shadow bg-card border border-border group">
+    <Card 
+      className={cn(
+        "p-5 flex flex-col gap-4 transition-all duration-300 border border-border group relative",
+        address.visited 
+          ? "bg-destructive/5 border-destructive/30 shadow-sm" 
+          : "hover:shadow-md bg-card"
+      )}
+    >
       <div className="flex justify-between items-start gap-3">
-        <div className="flex items-center gap-2">
-          <div className="p-2 bg-primary/5 rounded-lg text-primary">
-            <Building2 className="w-5 h-5" />
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <Checkbox 
+              id={`visited-${address.id}`}
+              checked={address.visited}
+              onCheckedChange={() => onToggleVisited(address.id)}
+              className="w-5 h-5 border-2"
+            />
           </div>
-          <h4 className="font-headline font-bold text-lg line-clamp-2 leading-tight">
-            {address.businessName}
-          </h4>
+          <div className="flex items-center gap-2">
+            <div className={cn(
+              "p-2 rounded-lg transition-colors",
+              address.visited ? "bg-destructive/10 text-destructive" : "bg-primary/5 text-primary"
+            )}>
+              <Building2 className="w-5 h-5" />
+            </div>
+            <h4 className={cn(
+              "font-headline font-bold text-lg line-clamp-2 leading-tight",
+              address.visited && "text-destructive/90"
+            )}>
+              {address.businessName}
+            </h4>
+          </div>
         </div>
-        <Badge variant="secondary" className="whitespace-nowrap bg-secondary/50 text-secondary-foreground font-semibold">
-          {address.district}
-        </Badge>
+        <div className="flex flex-col items-end gap-2">
+          <Badge variant="secondary" className="whitespace-nowrap bg-secondary/50 text-secondary-foreground font-semibold">
+            {address.district}
+          </Badge>
+          {address.visited && (
+            <Badge className="bg-destructive text-destructive-foreground border-none font-bold animate-in fade-in zoom-in duration-300">
+              <CheckCircle2 className="w-3 h-3 mr-1" />
+              Gidildi
+            </Badge>
+          )}
+        </div>
       </div>
 
       <div className="space-y-2">
         <div className="flex items-start gap-2 text-sm text-muted-foreground">
-          <MapPin className="w-4 h-4 mt-1 shrink-0 text-accent" />
+          <MapPin className={cn(
+            "w-4 h-4 mt-1 shrink-0",
+            address.visited ? "text-destructive/60" : "text-accent"
+          )} />
           <div className="leading-relaxed">
-            <span className="font-bold text-foreground block mb-0.5">{address.neighborhood} Mah.</span>
-            <p className="text-xs break-words">{address.fullAddress}</p>
+            <span className={cn(
+              "font-bold block mb-0.5",
+              address.visited ? "text-destructive/80" : "text-foreground"
+            )}>
+              {address.neighborhood} Mah.
+            </span>
+            <p className={cn(
+              "text-xs break-words",
+              address.visited ? "text-destructive/60" : "text-muted-foreground"
+            )}>
+              {address.fullAddress}
+            </p>
           </div>
         </div>
       </div>
 
       <Button
         onClick={openInMaps}
-        className="w-full mt-auto bg-accent hover:bg-accent/90 text-white font-bold h-12 rounded-xl flex items-center justify-center gap-2 group-hover:scale-[1.02] transition-transform"
+        className={cn(
+          "w-full mt-auto font-bold h-12 rounded-xl flex items-center justify-center gap-2 transition-all",
+          address.visited 
+            ? "bg-destructive/10 text-destructive hover:bg-destructive/20" 
+            : "bg-accent hover:bg-accent/90 text-white group-hover:scale-[1.02]"
+        )}
       >
         <Navigation className="w-5 h-5" />
         Haritada Aç

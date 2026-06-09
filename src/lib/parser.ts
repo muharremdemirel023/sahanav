@@ -34,7 +34,7 @@ export function buildGoogleMapsQuery(line: string, detectedDistrict: string): st
   // 1. Extract Door Number: NO:20, NO 20, NO:20/A, NO:113B etc.
   const doorNoRegex = /(?:NO|NO:|N)\s*(\d+(?:\/[A-Z0-9]+|[A-Z])?)/i;
   const doorNoMatch = upperLine.match(doorNoRegex);
-  const doorNo = doorNoMatch ? doorNoMatch[1].trim() : "";
+  const doorNo = doorNoMatch ? `NO:${doorNoMatch[1].trim()}` : "";
 
   // 2. Extract Street (Prioritize SOKAK/SK/SOK)
   const streetRegex = /((?:[A-ZÇĞİÖŞÜ0-9]+\s+){1,2})(?:SOKAK|SOK|SK)\.?/i;
@@ -113,6 +113,7 @@ export function parseAddressLine(line: string): ParsedAddress | null {
     district: detectedDistrict,
     neighborhood,
     streetQuery,
+    visited: false,
   };
 }
 
