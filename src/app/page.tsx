@@ -159,14 +159,17 @@ export default function SahaNav() {
             {/* Mahalle Grupları */}
             {filteredAddresses.length > 0 ? (
               <Accordion type="multiple" className="space-y-4">
-                {Object.entries(groupedAddresses).map(([neighborhood, list]) => {
+                {Object.entries(groupedAddresses).map(([neighborhood, list], index) => {
                   const neighborhoodVisitedCount = list.filter(a => a.visited).length;
                   const isFullyVisited = neighborhoodVisitedCount === list.length && list.length > 0;
+                  // Benzersiz key için index veya neighborhood ismi kullanılmalı. 
+                  // Eğer mahalle isimleri çakışıyorsa index eklemek güvenlidir.
+                  const accordionKey = `group-${neighborhood}-${index}`;
 
                   return (
                     <AccordionItem 
-                      key={neighborhood} 
-                      value={neighborhood} 
+                      key={accordionKey} 
+                      value={accordionKey} 
                       className={cn(
                         "border bg-card rounded-xl overflow-hidden px-4 shadow-sm transition-colors",
                         isFullyVisited && "bg-green-500/5 border-green-200"
