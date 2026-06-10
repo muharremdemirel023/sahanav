@@ -5,10 +5,14 @@ import type { ParsedAddress } from '@/types/address';
  * Generates a unique ID with a fallback for non-secure contexts.
  */
 function generateId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+  } catch (e) {
+    // Fallback to random string
   }
-  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  return 'id-' + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
 }
 
 /**
@@ -53,11 +57,12 @@ export function buildGoogleMapsQuery(line: string, detectedDistrict: string): st
 
   // Fallback: if no clear street/avenue detected, use the part before district
   if (!mainPath) {
-    const fallbackPath = upperLine.split(detectedDistrict)[0].trim();
+    const parts = upperLine.split(/(?:MAH|İSTANBUL)/i);
+    const fallbackPath = parts[0].trim();
     return `${fallbackPath} ${detectedDistrict} İSTANBUL`.replace(/\s+/g, ' ').trim();
   }
 
-  const districtStr = detectedDistrict !== 'DİĞER' ? detectedDistrict : 'Sultanbeyli';
+  const districtStr = detectedDistrict !== 'DİĞER' ? detectedDistrict : 'SULTANBEYLİ';
   
   // Format: [SOKAK VEYA CADDE] + [KAPI NO] + [DISTRICT] + İSTANBUL
   return `${mainPath} ${doorNo} ${districtStr} İSTANBUL`.replace(/\s+/g, ' ').trim();
@@ -85,8 +90,10 @@ export function groupAddressesByNeighborhood(addresses: ParsedAddress[]): Record
  * Parses a single line of text into an address object.
  */
 export function parseAddressLine(line: string): ParsedAddress | null {
-  const upperLine = line.toUpperCase().trim();
-  if (!upperLine) return null;
+  const cleanLine = line.trim();
+  if (!cleanLine) return null;
+
+  const upperLine = cleanLine.toUpperCase();
 
   // 1. Detect District
   let detectedDistrict = 'DİĞER';
@@ -98,18 +105,18 @@ export function parseAddressLine(line: string): ParsedAddress | null {
   }
 
   // 2. Detect Neighborhood
-  const neighborhood = extractNeighborhood(line) || 'BİLİNMEYEN';
+  const neighborhood = extractNeighborhood(cleanLine) || 'BİLİNMEYEN';
   
   // 3. Build optimized navigation query for Google Maps
-  const streetQuery = buildGoogleMapsQuery(line, detectedDistrict);
+  const streetQuery = buildGoogleMapsQuery(cleanLine, detectedDistrict);
 
-  // Business name detection (basic)
-  const businessName = line.split(/(?:CAD|SOK|MAH|NO)/i)[0].trim() || 'İşletme Adı Yok';
+  // Business name detection (basic - everything before first address keyword)
+  const businessName = cleanLine.split(/(?:CAD|SOK|MAH|NO)/i)[0].trim() || 'İşletme Adı Yok';
 
   return {
     id: generateId(),
     businessName,
-    fullAddress: line,
+    fullAddress: cleanLine,
     district: detectedDistrict,
     neighborhood,
     streetQuery,
@@ -123,7 +130,7 @@ export function parseAddressLine(line: string): ParsedAddress | null {
 export function deduplicateAddresses(addresses: ParsedAddress[]): ParsedAddress[] {
   const seen = new Set<string>();
   return addresses.filter((addr) => {
-    const key = `${addr.businessName}-${addr.fullAddress}`.toLowerCase();
+    const key = `${addr.businessName}-${addr.fullAddress}`.toLowerCase().replace(/\s+/g, '');
     if (seen.has(key)) return false;
     seen.add(key);
     return true;

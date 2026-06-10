@@ -18,7 +18,7 @@ export default function FileUploader({ onDataLoaded }: FileUploaderProps) {
   const { toast } = useToast();
 
   const processFile = async (file: File) => {
-    // Sadece uzantı kontrolü yapmak daha güvenlidir, çünkü MIME tipi her zaman "text/plain" gelmeyebilir
+    // Check extension
     if (!file.name.toLowerCase().endsWith(".txt")) {
       toast({
         variant: "destructive",
@@ -34,6 +34,10 @@ export default function FileUploader({ onDataLoaded }: FileUploaderProps) {
     reader.onload = (e) => {
       try {
         const text = e.target?.result as string;
+        if (!text) {
+          throw new Error("Dosya içeriği boş.");
+        }
+
         const lines = text.split(/\r?\n/);
         const results: ParsedAddress[] = [];
 
@@ -50,6 +54,7 @@ export default function FileUploader({ onDataLoaded }: FileUploaderProps) {
             title: "Uyarı",
             description: "Dosya içerisinde geçerli bir adres bulunamadı.",
           });
+          setLoading(false);
           return;
         }
 
@@ -68,6 +73,15 @@ export default function FileUploader({ onDataLoaded }: FileUploaderProps) {
       } finally {
         setLoading(false);
       }
+    };
+
+    reader.onerror = () => {
+      toast({
+        variant: "destructive",
+        title: "Hata",
+        description: "Dosya okunurken bir hata oluştu.",
+      });
+      setLoading(false);
     };
 
     reader.readAsText(file);
@@ -92,32 +106,36 @@ export default function FileUploader({ onDataLoaded }: FileUploaderProps) {
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) processFile(file);
+    if (file) {
+      processFile(file);
+      // Reset input value so same file can be uploaded again
+      e.target.value = '';
+    }
   };
 
   return (
     <Card
       className={`relative border-2 border-dashed transition-all duration-200 p-8 text-center min-h-[300px] flex flex-col items-center justify-center ${
         isDragging
-          ? "border-primary bg-primary/5"
+          ? "border-primary bg-primary/5 shadow-inner"
           : "border-muted-foreground/20 hover:border-primary/50"
       }`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      {/* Input her zaman en üstte (z-20) olmalı ki tıklamaları yakalasın */}
       <input
         type="file"
         accept=".txt"
         onChange={handleFileChange}
-        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-30"
         disabled={loading}
+        title=""
       />
       
       <div className="flex flex-col items-center gap-4 relative z-10 pointer-events-none">
         <div className="p-4 bg-primary/10 rounded-full">
-          <Upload className="w-8 h-8 text-primary" />
+          <Upload className={`w-8 h-8 text-primary ${loading ? 'animate-bounce' : ''}`} />
         </div>
         <div className="space-y-2">
           <h3 className="text-xl font-headline font-semibold">Dosya Yükle</h3>
@@ -125,16 +143,16 @@ export default function FileUploader({ onDataLoaded }: FileUploaderProps) {
             TXT dosyanızı sürükleyip bırakın veya seçmek için tıklayın.
           </p>
         </div>
-        <Button variant="outline" className="mt-2">
+        <Button variant="outline" className="mt-2 pointer-events-none">
           Dosya Seç
         </Button>
       </div>
       
       {loading && (
-        <div className="absolute inset-0 bg-background/80 flex items-center justify-center rounded-lg z-30">
+        <div className="absolute inset-0 bg-background/80 flex items-center justify-center rounded-lg z-40">
           <div className="flex flex-col items-center gap-2">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-            <p className="text-sm font-medium">İşleniyor...</p>
+            <p className="text-sm font-medium">Veriler İşleniyor...</p>
           </div>
         </div>
       )}
