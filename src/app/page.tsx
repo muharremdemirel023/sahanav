@@ -18,6 +18,8 @@ import { cn } from "@/lib/utils";
 
 type SortMode = "closest" | "furthest" | "alphabetical";
 
+const STORAGE_KEY = "sahanav_data_v1";
+
 export default function SahaNav() {
   const [addresses, setAddresses] = useState<ParsedAddress[]>([]);
   const [selectedDistrict, setSelectedDistrict] = useState("all");
@@ -26,7 +28,28 @@ export default function SahaNav() {
   const [sortMode, setSortMode] = useState<SortMode>("closest");
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [geocodingProgress, setGeocodingProgress] = useState(0);
+  const [isInitialized, setIsInitialized] = useState(false);
   const { toast } = useToast();
+
+  // Load data from localStorage on mount
+  useEffect(() => {
+    const savedData = localStorage.getItem(STORAGE_KEY);
+    if (savedData) {
+      try {
+        setAddresses(JSON.parse(savedData));
+      } catch (e) {
+        console.error("Kayıtlı veriler okunamadı", e);
+      }
+    }
+    setIsInitialized(true);
+  }, []);
+
+  // Save data to localStorage whenever addresses change
+  useEffect(() => {
+    if (isInitialized) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(addresses));
+    }
+  }, [addresses, isInitialized]);
 
   const handleDataLoaded = (data: ParsedAddress[]) => {
     setAddresses(data);
@@ -41,6 +64,7 @@ export default function SahaNav() {
       setSelectedDistrict("all");
       setSelectedNeighborhood("all");
       setGeocodingProgress(0);
+      localStorage.removeItem(STORAGE_KEY);
     }
   };
 
@@ -97,6 +121,7 @@ export default function SahaNav() {
         const results = await Promise.all(batch.map(async (addr, index) => {
           if (addr.lat !== undefined) return addr;
           
+          // Fast processing with 100ms delay for high-speed
           const coords = await getCoordinates(addr.streetQuery, 100 + (index * 50));
           
           if (coords) {
@@ -117,6 +142,7 @@ export default function SahaNav() {
         processed += batch.length;
         if (isMounted) {
           setGeocodingProgress(Math.round((processed / currentAddresses.length) * 100));
+          // Update state periodically or at the end to keep storage in sync
           if (i % 20 === 0 || processed >= currentAddresses.length) {
             setAddresses([...currentAddresses]);
           }
@@ -163,6 +189,14 @@ export default function SahaNav() {
     closest: Math.min(...filteredAndSortedAddresses.map(a => a.distance || Infinity).filter(d => d !== Infinity), 0)
   }), [filteredAndSortedAddresses]);
 
+  if (!isInitialized) {
+    return (
+      <div className="min-h-screen bg-[#F2F2F7] flex items-center justify-center">
+        <Loader2 className="w-10 h-10 text-primary animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-[#F2F2F7]">
       <header className="sticky top-0 z-50 ios-glass border-b pt-12 pb-6 px-6">
@@ -192,6 +226,7 @@ export default function SahaNav() {
           <FileUploader onDataLoaded={handleDataLoaded} />
         ) : (
           <div className="space-y-8">
+            {/* Stats Panel */}
             <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[
                 { label: "TOPLAM", value: stats.total, color: "bg-blue-500", icon: ListChecks },
@@ -209,6 +244,7 @@ export default function SahaNav() {
               ))}
             </section>
 
+            {/* Filter & Sort Section */}
             <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="md:col-span-2">
                 <FilterBar
@@ -242,6 +278,7 @@ export default function SahaNav() {
               </div>
             </section>
 
+            {/* Neighborhood Groups */}
             <Accordion type="multiple" className="space-y-4">
               {Object.entries(groupedAddresses).map(([neighborhood, list]) => {
                 const isDone = list.every(a => a.visited) && list.length > 0;
