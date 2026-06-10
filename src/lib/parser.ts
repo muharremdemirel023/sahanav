@@ -16,16 +16,54 @@ function generateId(): string {
 }
 
 /**
- * Extracts neighborhood name from a given address line using flexible regex.
+ * Extracts neighborhood name from a given address line using flexible regex and cleaning rules.
  * Rule: /([A-ZÇĞİÖŞÜ0-9\s]+)\s+MAH\.?/i
  */
 export function extractNeighborhood(addressLine: string): string | null {
-  const neighborhoodRegex = /([A-ZÇĞİÖŞÜ0-9\s]+)\s+MAH\.?/i;
-  const match = addressLine.match(neighborhoodRegex);
-  if (match && match[1]) {
-    const name = match[1].trim().toUpperCase();
-    if (name.length > 2 && name.length < 30) return name;
+  if (!addressLine) return null;
+
+  // 1. Normalize spaces and find the part before " MAH"
+  const normalizedLine = addressLine.replace(/\s+/g, ' ').trim();
+  const upperLine = normalizedLine.toUpperCase();
+  const mahIndex = upperLine.indexOf(" MAH");
+  
+  if (mahIndex === -1) return null;
+
+  // 2. Extract the potential neighborhood string before "MAH"
+  let neighborhoodPart = normalizedLine.substring(0, mahIndex).trim();
+
+  // 3. Apply cleaning rules:
+  // - Remove "NO:", "NO", "NO/", "NO-" and following digits
+  neighborhoodPart = neighborhoodPart.replace(/(?:NO[:\/\-\s]*\d+)/gi, '');
+  
+  // - Remove leading numbers at the start of the segment
+  neighborhoodPart = neighborhoodPart.replace(/^\d+[\s\.\-]*/, '');
+  
+  // - Remove standalone numbers and special characters that might be left
+  neighborhoodPart = neighborhoodPart.replace(/[\.\,\-\/]/g, ' ');
+  
+  // - Normalize spaces again after cleaning
+  const words = neighborhoodPart.trim().split(/\s+/);
+  
+  if (words.length === 0) return null;
+
+  // 4. Extract the neighborhood name (usually the last 1-2 words before "MAH")
+  // Common multi-word neighborhood prefixes in Turkish
+  const neighborhoodPrefixes = ["YENİ", "ESKİ", "YUKARI", "AŞAĞI", "BÜYÜK", "KÜÇÜK", "ORTA"];
+  
+  const lastWord = words[words.length - 1].toUpperCase();
+  const prevWord = words.length > 1 ? words[words.length - 2].toUpperCase() : "";
+
+  let result = lastWord;
+  if (neighborhoodPrefixes.includes(prevWord)) {
+    result = `${prevWord} ${lastWord}`;
   }
+
+  // Final check for length and valid content
+  if (result.length > 2 && result.length < 35 && !/^\d+$/.test(result)) {
+    return result;
+  }
+
   return null;
 }
 
@@ -85,7 +123,7 @@ export function groupAddressesByNeighborhood(addresses: ParsedAddress[]): Record
     groups[groupKey].push(addr);
   });
 
-  // Sort groups by name (optional but better for UI consistency)
+  // Sort groups by name
   const sortedKeys = Object.keys(groups).sort();
   const sortedGroups: Record<string, ParsedAddress[]> = {};
   sortedKeys.forEach(key => {
@@ -99,7 +137,7 @@ export function groupAddressesByNeighborhood(addresses: ParsedAddress[]): Record
  * Parses a single line of text into an address object.
  */
 export function parseAddressLine(line: string): ParsedAddress | null {
-  const cleanLine = line.trim();
+  const cleanLine = line.replace(/\s+/g, ' ').trim();
   if (!cleanLine || cleanLine.length < 15) return null;
 
   const upperLine = cleanLine.toUpperCase();
@@ -115,16 +153,19 @@ export function parseAddressLine(line: string): ParsedAddress | null {
   const neighborhood = extractNeighborhood(cleanLine) || 'BİLİNMEYEN';
   const streetQuery = buildGoogleMapsQuery(cleanLine, detectedDistrict);
 
+  // Business name extraction: take part before first major address marker
   const businessParts = cleanLine.split(/(?:MAHALLE|MAH\.|CAD|SOK|NO|SOK|SK)/i);
   let businessName = (businessParts[0] && businessParts[0].trim()) || 'İşletme Adı Yok';
-  businessName = businessName.replace(/^\d+[\.\s-]/, '').trim(); 
+  
+  // Remove leading numbers and "NO" from business name if it started with them
+  businessName = businessName.replace(/^(?:NO[:\s\-\/]*\d+)/gi, '').replace(/^\d+[\s\.\-]*/, '').trim();
 
   return {
     id: generateId(),
     businessName: businessName.length > 2 ? businessName : 'İşletme Adı Yok',
     fullAddress: cleanLine,
     district: detectedDistrict,
-    neighborhood: neighborhood.toUpperCase(), // Ensure normalized case
+    neighborhood: neighborhood.toUpperCase(),
     streetQuery,
     visited: false,
   };
