@@ -13,7 +13,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import * as pdfjs from "pdfjs-dist";
 
-pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs`;
+// Worker configuration for Next.js 15 environments
+if (typeof window !== 'undefined') {
+  pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
+}
 
 interface FileUploaderProps {
   onDataLoaded: (data: ParsedAddress[]) => void;
@@ -32,18 +35,13 @@ export default function FileUploader({ onDataLoaded }: FileUploaderProps) {
   const { toast } = useToast();
 
   const cleanExtractedLine = (line: string): string => {
-    // Normalize spaces and uppercase
     let cleaned = line.replace(/\s+/g, ' ').trim().toUpperCase();
     
-    // Fix glued text like NO:161ABDURRAHMANGAZİ MAH.
     cleaned = cleaned.replace(/NO:(\d+)([A-ZÇĞİÖŞÜ\s]+MAH\.?)/gi, '$2 NO:$1');
-    
-    // Fix glued door numbers with letters like NO:153AORHANGAZİ MAH.
     cleaned = cleaned.replace(/NO:(\d+[A-Z])([A-ZÇĞİÖŞÜ\s]+MAH\.?)/gi, '$2 NO:$1');
 
-    // Remove unwanted keywords/junk (Case insensitive matching handled by toUpperCase)
     const junkPatterns = [
-      /\d{2}\.\d{2}\.\d{4}/g, // Dates
+      /\d{2}\.\d{2}\.\d{4}/g,
       /EKİP YETKİLİSİ:.*$/g,
       /ÜYE NO:.*$/g,
       /KAMPANYA:.*$/g,
@@ -57,11 +55,9 @@ export default function FileUploader({ onDataLoaded }: FileUploaderProps) {
       cleaned = cleaned.replace(pattern, '');
     });
 
-    // Remove the plate number itself if found
     if (plate) {
       const normalizedPlate = plate.replace(/\s+/g, '').toUpperCase();
       cleaned = cleaned.replace(new RegExp(normalizedPlate, 'g'), '');
-      // Also try with spaces (assuming common Turkish plate format 34 GPB 365)
       const spacePlate = plate.replace(/(\d{2})([A-Z]+)(\d+)/, '$1 $2 $3').toUpperCase();
       cleaned = cleaned.replace(new RegExp(spacePlate, 'g'), '');
     }
@@ -72,13 +68,16 @@ export default function FileUploader({ onDataLoaded }: FileUploaderProps) {
   const extractTextFromPdf = async (file: File): Promise<string[]> => {
     try {
       const arrayBuffer = await file.arrayBuffer();
-      const loadingTask = pdfjs.getDocument({ 
-        data: arrayBuffer,
-        useSystemFonts: true,
-        disableFontFace: false
-      });
+      const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
       
-      const pdf = await loadingTask.promise;
+      let pdf;
+      try {
+        pdf = await loadingTask.promise;
+      } catch (e) {
+        console.error("PDF Worker Error:", e);
+        throw new Error("PDF okuyucu başlatılamadı.");
+      }
+
       const normalizedSearchPlate = plate.replace(/\s+/g, '').toUpperCase();
       const extractedLines: string[] = [];
 
@@ -87,7 +86,9 @@ export default function FileUploader({ onDataLoaded }: FileUploaderProps) {
         const textContent = await page.getTextContent();
         const items = textContent.items as any[];
         
-        // Group items by their vertical position (Y-axis) to reconstruct lines
+        if (items.length === 0) continue;
+
+        // Group items by vertical position to reconstruct rows
         const linesMap: { [key: number]: string[] } = {};
         items.forEach(item => {
           const y = Math.round(item.transform[5]);
@@ -104,11 +105,18 @@ export default function FileUploader({ onDataLoaded }: FileUploaderProps) {
             extractedLines.push(cleanExtractedLine(fullLine));
           }
         });
-        
-        page.cleanup();
       }
+
+      if (extractedLines.length === 0) {
+        throw new Error("PDF metni çıkarılamadı. Bu PDF taranmış görsel olabilir veya belirtilen plaka bulunamadı.");
+      }
+
       return extractedLines;
     } catch (err: any) {
+      console.error("PDF Extraction Error:", err);
+      if (err.message.includes("okuyucu") || err.message.includes("çıkarılamadı")) {
+        throw err;
+      }
       throw new Error("PDF dosyası okunurken hata oluştu.");
     }
   };
@@ -153,7 +161,6 @@ export default function FileUploader({ onDataLoaded }: FileUploaderProps) {
           return;
         }
         const lines = await extractTextFromPdf(file);
-        if (lines.length === 0) throw new Error("Belirtilen plakaya ait adres bulunamadı.");
         setPreviewLines(lines.map(l => ({ id: Math.random().toString(36).substr(2, 9), text: l })));
       }
     } catch (err: any) {
@@ -334,4 +341,3 @@ export default function FileUploader({ onDataLoaded }: FileUploaderProps) {
     </div>
   );
 }
-
