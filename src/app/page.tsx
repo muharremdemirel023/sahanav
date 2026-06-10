@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
-import { MapPin, Filter, Trash2, Layers, CheckCircle, Clock, ListChecks, Navigation2, SortAsc, LayoutGrid, FileText } from "lucide-react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
+import { MapPin, Filter, Trash2, Layers, CheckCircle, Clock, ListChecks, Navigation2, SortAsc, LayoutGrid, FileText, Loader2 } from "lucide-react";
 import FileUploader from "@/components/FileUploader";
 import FilterBar from "@/components/FilterBar";
 import AddressCard from "@/components/AddressCard";
@@ -11,7 +11,7 @@ import { calculateDistance, getCoordinates } from "@/lib/location";
 import { Toaster } from "@/components/ui/toaster";
 import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -25,6 +25,7 @@ export default function SahaNav() {
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [sortMode, setSortMode] = useState<SortMode>("closest");
   const [isGeocoding, setIsGeocoding] = useState(false);
+  const [geocodingProgress, setGeocodingProgress] = useState(0);
   const { toast } = useToast();
 
   const handleDataLoaded = (data: ParsedAddress[]) => {
@@ -38,6 +39,7 @@ export default function SahaNav() {
       setAddresses([]);
       setSelectedDistrict("all");
       setSelectedNeighborhood("all");
+      setGeocodingProgress(0);
     }
   };
 
@@ -79,40 +81,67 @@ export default function SahaNav() {
     );
   };
 
+  // Improved geocoding logic with batching and progress tracking
   useEffect(() => {
     if (addresses.length === 0) return;
 
     const geocodeAddresses = async () => {
+      // Find addresses that need geocoding or distance update
+      const targetIndices = addresses.map((a, idx) => {
+        const needsCoords = a.lat === undefined;
+        const needsDistance = userLocation && a.lat !== undefined && a.distance === undefined;
+        return needsCoords || needsDistance ? idx : -1;
+      }).filter(idx => idx !== -1);
+
+      if (targetIndices.length === 0) {
+        setIsGeocoding(false);
+        return;
+      }
+
       setIsGeocoding(true);
-      let updated = false;
       const currentAddresses = [...addresses];
+      const BATCH_SIZE = 3;
+      let processedCount = 0;
 
-      for (let i = 0; i < currentAddresses.length; i++) {
-        const addr = currentAddresses[i];
-        
-        if (userLocation && addr.lat !== undefined && addr.distance === undefined) {
-          currentAddresses[i] = {
-            ...addr,
-            distance: calculateDistance(userLocation.lat, userLocation.lng, addr.lat, addr.lng)
-          };
-          updated = true;
-        }
+      for (let i = 0; i < targetIndices.length; i += BATCH_SIZE) {
+        const batch = targetIndices.slice(i, i + BATCH_SIZE);
+        let batchUpdated = false;
 
-        if (addr.lat === undefined) {
-          const coords = await getCoordinates(addr.streetQuery);
-          if (coords) {
-            currentAddresses[i] = {
+        await Promise.all(batch.map(async (idx) => {
+          const addr = currentAddresses[idx];
+          
+          // Case 1: Already has coords, just needs distance
+          if (userLocation && addr.lat !== undefined && addr.distance === undefined) {
+            currentAddresses[idx] = {
               ...addr,
-              lat: coords.lat,
-              lng: coords.lng,
-              distance: userLocation ? calculateDistance(userLocation.lat, userLocation.lng, coords.lat, coords.lng) : undefined
+              distance: calculateDistance(userLocation.lat, userLocation.lng, addr.lat, addr.lng)
             };
-            updated = true;
+            batchUpdated = true;
+          } 
+          // Case 2: Needs both coords and distance
+          else if (addr.lat === undefined) {
+            const coords = await getCoordinates(addr.streetQuery);
+            if (coords) {
+              currentAddresses[idx] = {
+                ...addr,
+                lat: coords.lat,
+                lng: coords.lng,
+                distance: userLocation ? calculateDistance(userLocation.lat, userLocation.lng, coords.lat, coords.lng) : undefined
+              };
+              batchUpdated = true;
+            }
           }
+        }));
+
+        processedCount += batch.length;
+        setGeocodingProgress(Math.round((processedCount / targetIndices.length) * 100));
+
+        // Update state in batches to keep UI responsive
+        if (batchUpdated) {
+          setAddresses([...currentAddresses]);
         }
       }
 
-      if (updated) setAddresses(currentAddresses);
       setIsGeocoding(false);
     };
 
@@ -169,17 +198,25 @@ export default function SahaNav() {
             <h1 className="text-3xl font-bold tracking-tight text-foreground">SahaNav</h1>
             <p className="text-sm font-medium text-muted-foreground">Navigasyon ve Rota Yönetimi</p>
           </div>
-          {addresses.length > 0 && (
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={clearData} 
-              className="text-destructive font-semibold hover:bg-destructive/10"
-            >
-              <Trash2 className="w-4 h-4 mr-2" />
-              Sıfırla
-            </Button>
-          )}
+          <div className="flex items-center gap-3">
+            {isGeocoding && (
+              <div className="hidden md:flex flex-col items-end gap-1 min-w-[120px]">
+                <span className="text-[10px] font-bold text-primary animate-pulse uppercase tracking-wider">KONUM ANALİZİ %{geocodingProgress}</span>
+                <Progress value={geocodingProgress} className="h-1.5 w-full bg-primary/10" />
+              </div>
+            )}
+            {addresses.length > 0 && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={clearData} 
+                className="text-destructive font-semibold hover:bg-destructive/10"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Sıfırla
+              </Button>
+            )}
+          </div>
         </div>
       </header>
 
@@ -251,7 +288,11 @@ export default function SahaNav() {
                     userLocation ? "bg-green-500 hover:bg-green-600" : "bg-primary hover:bg-primary/90"
                   )}
                 >
-                  <Navigation2 className="w-4 h-4 mr-2" />
+                  {isGeocoding ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Navigation2 className="w-4 h-4 mr-2" />
+                  )}
                   {userLocation ? "Konum Aktif" : "Konumumu Kullan"}
                 </Button>
               </div>
@@ -269,7 +310,7 @@ export default function SahaNav() {
                     key={accordionKey} 
                     value={accordionKey} 
                     className={cn(
-                      "ios-card px-4 border-none transition-all",
+                      "ios-card px-4 border-none transition-all overflow-hidden",
                       isDone && "opacity-60 grayscale-[0.5]"
                     )}
                   >

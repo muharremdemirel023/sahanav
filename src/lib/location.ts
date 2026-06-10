@@ -17,20 +17,26 @@ function deg2rad(deg: number): number {
   return deg * (Math.PI / 180);
 }
 
-const GEOCODE_CACHE_KEY = 'sahanav_geocode_cache';
+const GEOCODE_CACHE_KEY = 'sahanav_geocode_cache_v2';
 
 /**
- * Gets coordinates from cache or Nominatim API.
+ * Gets coordinates from cache or Nominatim API with a small delay to respect rate limits.
  */
 export async function getCoordinates(address: string): Promise<{ lat: number; lng: number } | null> {
-  // Try local storage cache first
-  const cache = JSON.parse(localStorage.getItem(GEOCODE_CACHE_KEY) || '{}');
+  // Check local storage cache first
+  if (typeof window === 'undefined') return null;
+  
+  const cacheStr = localStorage.getItem(GEOCODE_CACHE_KEY);
+  const cache = cacheStr ? JSON.parse(cacheStr) : {};
+  
   if (cache[address]) {
     return cache[address];
   }
 
   try {
-    // Nominatim API requires a user-agent
+    // Add a small jittered delay to avoid hitting rate limits when many requests are fired
+    await new Promise(resolve => setTimeout(resolve, 300 + Math.random() * 200));
+
     const response = await fetch(
       `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`,
       {
@@ -39,6 +45,12 @@ export async function getCoordinates(address: string): Promise<{ lat: number; ln
         },
       }
     );
+    
+    if (response.status === 429) {
+      console.warn('Geocoding rate limit hit, skipping for now.');
+      return null;
+    }
+
     const data = await response.json();
 
     if (data && data.length > 0) {
@@ -54,7 +66,7 @@ export async function getCoordinates(address: string): Promise<{ lat: number; ln
       return coords;
     }
   } catch (error) {
-    console.error('Geocoding error:', error);
+    console.error('Geocoding error for address:', address, error);
   }
 
   return null;
