@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -69,9 +70,14 @@ export default function SahaNav() {
   };
 
   const toggleVisited = (id: string) => {
-    setAddresses(prev => prev.map(addr => 
-      addr.id === id ? { ...addr, visited: !addr.visited } : addr
-    ));
+    setAddresses(prev => {
+      const newAddresses = prev.map(addr => 
+        addr.id === id ? { ...addr, visited: !addr.visited } : addr
+      );
+      // Immediately update localStorage for extra safety during long background tasks
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(newAddresses));
+      return newAddresses;
+    });
   };
 
   const handleGetLocation = () => {
@@ -89,6 +95,7 @@ export default function SahaNav() {
     );
   };
 
+  // Background Geocoding & Distance Calculation
   useEffect(() => {
     if (addresses.length === 0) return;
 
@@ -96,57 +103,59 @@ export default function SahaNav() {
 
     const processAddresses = async () => {
       setIsGeocoding(true);
-      const currentAddresses = [...addresses];
       
-      let needsUpdate = false;
-      for (let i = 0; i < currentAddresses.length; i++) {
-        const addr = currentAddresses[i];
+      const batchSize = 10;
+      let processedCount = 0;
+
+      // First, update distances for addresses that already have lat/lng
+      setAddresses(prev => prev.map(addr => {
         if (userLocation && addr.lat && addr.lng) {
           const dist = calculateDistance(userLocation.lat, userLocation.lng, addr.lat, addr.lng);
-          if (addr.distance !== dist) {
-            currentAddresses[i] = { ...addr, distance: dist };
-            needsUpdate = true;
-          }
+          return { ...addr, distance: dist };
         }
-      }
-      if (needsUpdate && isMounted) setAddresses([...currentAddresses]);
+        return addr;
+      }));
 
-      const batchSize = 10;
-      let processed = 0;
-
-      for (let i = 0; i < currentAddresses.length; i += batchSize) {
+      // Then, geocode addresses that are missing coordinates
+      for (let i = 0; i < addresses.length; i += batchSize) {
         if (!isMounted) break;
 
-        const batch = currentAddresses.slice(i, i + batchSize);
+        const batch = addresses.slice(i, i + batchSize);
         const results = await Promise.all(batch.map(async (addr, index) => {
-          if (addr.lat !== undefined) return addr;
+          // If already has lat/lng, skip
+          if (addr.lat !== undefined) return null;
           
-          // Fast processing with 100ms delay for high-speed
-          const coords = await getCoordinates(addr.streetQuery, 100 + (index * 50));
+          // Request coordinates (Nominatim compliant delay)
+          const coords = await getCoordinates(addr.streetQuery, 1100 + (index * 50));
           
           if (coords) {
             return {
-              ...addr,
+              id: addr.id,
               lat: coords.lat,
               lng: coords.lng,
               distance: userLocation ? calculateDistance(userLocation.lat, userLocation.lng, coords.lat, coords.lng) : undefined
             };
           }
-          return addr;
+          return null;
         }));
 
-        results.forEach((res, index) => {
-          currentAddresses[i + index] = res;
-        });
+        if (!isMounted) break;
 
-        processed += batch.length;
-        if (isMounted) {
-          setGeocodingProgress(Math.round((processed / currentAddresses.length) * 100));
-          // Update state periodically or at the end to keep storage in sync
-          if (i % 20 === 0 || processed >= currentAddresses.length) {
-            setAddresses([...currentAddresses]);
-          }
+        // Apply results using functional update to prevent overwriting 'visited' status
+        const successfulResults = results.filter((r): r is NonNullable<typeof r> => r !== null);
+        
+        if (successfulResults.length > 0) {
+          setAddresses(prev => prev.map(addr => {
+            const found = successfulResults.find(r => r.id === addr.id);
+            if (found) {
+              return { ...addr, lat: found.lat, lng: found.lng, distance: found.distance };
+            }
+            return addr;
+          }));
         }
+
+        processedCount += batch.length;
+        setGeocodingProgress(Math.round((processedCount / addresses.length) * 100));
       }
 
       if (isMounted) setIsGeocoding(false);
@@ -154,7 +163,7 @@ export default function SahaNav() {
 
     processAddresses();
     return () => { isMounted = false; };
-  }, [userLocation, addresses.length]);
+  }, [userLocation, addresses.length]); // Only re-run when location changes or list size changes
 
   const districts = useMemo(() => Array.from(new Set(addresses.map(a => a.district))).sort(), [addresses]);
 
@@ -203,12 +212,12 @@ export default function SahaNav() {
         <div className="max-w-4xl mx-auto flex justify-between items-end">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-foreground">SahaNav</h1>
-            <p className="text-sm font-medium text-muted-foreground">Turbo Mesafe Hesaplama</p>
+            <p className="text-sm font-medium text-muted-foreground">Saha Operasyon Yönetimi</p>
           </div>
           <div className="flex items-center gap-3">
             {isGeocoding && (
               <div className="flex flex-col items-end gap-1">
-                <span className="text-[10px] font-bold text-primary animate-pulse">TURBO MOD %{geocodingProgress}</span>
+                <span className="text-[10px] font-bold text-primary animate-pulse">HESAPLANIYOR %{geocodingProgress}</span>
                 <Progress value={geocodingProgress} className="h-1.5 w-24 bg-primary/10" />
               </div>
             )}
@@ -261,7 +270,7 @@ export default function SahaNav() {
                 <div className="space-y-2">
                   <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">SIRALAMA</label>
                   <Select value={sortMode} onValueChange={(v) => setSortMode(v as SortMode)}>
-                    <SelectTrigger className="bg-[#F2F2F7] border-none h-12 rounded-xl">
+                    <SelectTrigger className="bg-[#F2F2F7] border-none h-12 rounded-xl focus:ring-0">
                       <div className="flex items-center gap-2"><SortAsc className="w-4 h-4 text-primary" /><SelectValue /></div>
                     </SelectTrigger>
                     <SelectContent>
@@ -271,7 +280,7 @@ export default function SahaNav() {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button onClick={handleGetLocation} className="w-full h-12 rounded-xl font-bold bg-primary shadow-none">
+                <Button onClick={handleGetLocation} className="w-full h-12 rounded-xl font-bold bg-primary shadow-none active:scale-[0.98] transition-transform">
                   <Navigation2 className="w-4 h-4 mr-2" />
                   Konumumu Kullan
                 </Button>
@@ -284,7 +293,7 @@ export default function SahaNav() {
                 const isDone = list.every(a => a.visited) && list.length > 0;
                 return (
                   <AccordionItem key={neighborhood} value={neighborhood} className={cn("ios-card px-4 border-none transition-all", isDone && "opacity-60")}>
-                    <AccordionTrigger className="hover:no-underline py-5">
+                    <AccordionTrigger className="hover:no-underline py-5 [&[data-state=open]>svg]:rotate-180">
                       <div className="flex items-center gap-4 text-left">
                         <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center", isDone ? "bg-green-500/10 text-green-600" : "bg-primary/10 text-primary")}>
                           <LayoutGrid className="w-5 h-5" />
