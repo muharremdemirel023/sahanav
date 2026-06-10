@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import { MapPin, Trash2, CheckCircle, Clock, ListChecks, Navigation2, SortAsc, LayoutGrid, Loader2 } from "lucide-react";
+import { MapPin, Trash2, CheckCircle, Clock, ListChecks, Navigation2, SortAsc, LayoutGrid, Loader2, Route } from "lucide-react";
 import FileUploader from "@/components/FileUploader";
 import FilterBar from "@/components/FilterBar";
 import AddressCard from "@/components/AddressCard";
@@ -30,6 +30,7 @@ export default function SahaNav() {
   const [isGeocoding, setIsGeocoding] = useState(false);
   const [geocodingProgress, setGeocodingProgress] = useState(0);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [selectedRouteIds, setSelectedRouteIds] = useState<string[]>([]);
   const { toast } = useToast();
 
   // Load data from localStorage on mount
@@ -56,6 +57,7 @@ export default function SahaNav() {
     setAddresses(data);
     setSelectedDistrict("all");
     setSelectedNeighborhood("all");
+    setSelectedRouteIds([]);
     setGeocodingProgress(0);
   };
 
@@ -64,6 +66,7 @@ export default function SahaNav() {
       setAddresses([]);
       setSelectedDistrict("all");
       setSelectedNeighborhood("all");
+      setSelectedRouteIds([]);
       setGeocodingProgress(0);
       localStorage.removeItem(STORAGE_KEY);
     }
@@ -74,10 +77,49 @@ export default function SahaNav() {
       const newAddresses = prev.map(addr => 
         addr.id === id ? { ...addr, visited: !addr.visited } : addr
       );
-      // Immediately update localStorage for extra safety during long background tasks
       localStorage.setItem(STORAGE_KEY, JSON.stringify(newAddresses));
       return newAddresses;
     });
+  };
+
+  const toggleRouteSelection = (id: string) => {
+    setSelectedRouteIds(prev => {
+      if (prev.includes(id)) {
+        return prev.filter(i => i !== id);
+      }
+      return [...prev, id];
+    });
+  };
+
+  const handleCreateRoute = () => {
+    if (selectedRouteIds.length < 2) return;
+    if (selectedRouteIds.length > 9) {
+      toast({ 
+        variant: "destructive", 
+        title: "Limit Aşıldı", 
+        description: "Google Maps rotası en fazla 9 durak destekler." 
+      });
+      return;
+    }
+
+    const selectedAddresses = selectedRouteIds
+      .map(id => addresses.find(a => a.id === id))
+      .filter((a): a is ParsedAddress => !!a);
+
+    const origin = encodeURIComponent(selectedAddresses[0].streetQuery);
+    const destination = encodeURIComponent(selectedAddresses[selectedAddresses.length - 1].streetQuery);
+    
+    let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=driving`;
+
+    if (selectedAddresses.length > 2) {
+      const waypoints = selectedAddresses
+        .slice(1, -1)
+        .map(a => encodeURIComponent(a.streetQuery))
+        .join('|');
+      url += `&waypoints=${waypoints}`;
+    }
+
+    window.open(url, "_blank");
   };
 
   const handleGetLocation = () => {
@@ -95,7 +137,7 @@ export default function SahaNav() {
     );
   };
 
-  // Background Geocoding & Distance Calculation
+  // Background Geocoding
   useEffect(() => {
     if (addresses.length === 0) return;
 
@@ -103,11 +145,10 @@ export default function SahaNav() {
 
     const processAddresses = async () => {
       setIsGeocoding(true);
-      
       const batchSize = 10;
       let processedCount = 0;
 
-      // First, update distances for addresses that already have lat/lng
+      // Update existing
       setAddresses(prev => prev.map(addr => {
         if (userLocation && addr.lat && addr.lng) {
           const dist = calculateDistance(userLocation.lat, userLocation.lng, addr.lat, addr.lng);
@@ -116,18 +157,12 @@ export default function SahaNav() {
         return addr;
       }));
 
-      // Then, geocode addresses that are missing coordinates
       for (let i = 0; i < addresses.length; i += batchSize) {
         if (!isMounted) break;
-
         const batch = addresses.slice(i, i + batchSize);
         const results = await Promise.all(batch.map(async (addr, index) => {
-          // If already has lat/lng, skip
           if (addr.lat !== undefined) return null;
-          
-          // Request coordinates (Nominatim compliant delay)
           const coords = await getCoordinates(addr.streetQuery, 1100 + (index * 50));
-          
           if (coords) {
             return {
               id: addr.id,
@@ -141,9 +176,7 @@ export default function SahaNav() {
 
         if (!isMounted) break;
 
-        // Apply results using functional update to prevent overwriting 'visited' status
         const successfulResults = results.filter((r): r is NonNullable<typeof r> => r !== null);
-        
         if (successfulResults.length > 0) {
           setAddresses(prev => prev.map(addr => {
             const found = successfulResults.find(r => r.id === addr.id);
@@ -163,7 +196,7 @@ export default function SahaNav() {
 
     processAddresses();
     return () => { isMounted = false; };
-  }, [userLocation, addresses.length]); // Only re-run when location changes or list size changes
+  }, [userLocation, addresses.length]);
 
   const districts = useMemo(() => Array.from(new Set(addresses.map(a => a.district))).sort(), [addresses]);
 
@@ -207,7 +240,7 @@ export default function SahaNav() {
   }
 
   return (
-    <main className="min-h-screen bg-[#F2F2F7]">
+    <main className="min-h-screen bg-[#F2F2F7] pb-32">
       <header className="sticky top-0 z-50 ios-glass border-b pt-12 pb-6 px-6">
         <div className="max-w-4xl mx-auto flex justify-between items-end">
           <div>
@@ -217,7 +250,7 @@ export default function SahaNav() {
           <div className="flex items-center gap-3">
             {isGeocoding && (
               <div className="flex flex-col items-end gap-1">
-                <span className="text-[10px] font-bold text-primary animate-pulse">HESAPLANIYOR %{geocodingProgress}</span>
+                <span className="text-[10px] font-bold text-primary animate-pulse">%{geocodingProgress}</span>
                 <Progress value={geocodingProgress} className="h-1.5 w-24 bg-primary/10" />
               </div>
             )}
@@ -306,7 +339,16 @@ export default function SahaNav() {
                     </AccordionTrigger>
                     <AccordionContent className="pb-6">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {list.map(addr => <AddressCard key={addr.id} address={addr} onToggleVisited={toggleVisited} />)}
+                        {list.map(addr => (
+                          <AddressCard 
+                            key={addr.id} 
+                            address={addr} 
+                            onToggleVisited={toggleVisited}
+                            isSelected={selectedRouteIds.includes(addr.id)}
+                            onToggleSelection={() => toggleRouteSelection(addr.id)}
+                            selectionOrder={selectedRouteIds.indexOf(addr.id) + 1}
+                          />
+                        ))}
                       </div>
                     </AccordionContent>
                   </AccordionItem>
@@ -316,6 +358,41 @@ export default function SahaNav() {
           </div>
         )}
       </div>
+
+      {/* Fixed Route Button */}
+      {selectedRouteIds.length > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 p-6 z-[60] bg-gradient-to-t from-background via-background/90 to-transparent">
+          <div className="max-w-4xl mx-auto">
+            <Button 
+              disabled={selectedRouteIds.length < 2 || selectedRouteIds.length > 9}
+              onClick={handleCreateRoute}
+              className={cn(
+                "w-full h-16 rounded-2xl font-black text-lg ios-shadow transition-all active:scale-95 flex items-center justify-between px-8",
+                selectedRouteIds.length >= 2 && selectedRouteIds.length <= 9 ? "bg-primary" : "bg-muted text-muted-foreground"
+              )}
+            >
+              <div className="flex items-center gap-3">
+                <Route className="w-6 h-6" />
+                <span>Seçilenleri Rota Yap</span>
+              </div>
+              <div className="flex items-center gap-2 bg-white/20 px-4 py-1.5 rounded-full text-sm">
+                <span>{selectedRouteIds.length} Adres</span>
+              </div>
+            </Button>
+            {selectedRouteIds.length > 9 && (
+              <p className="text-center text-xs font-bold text-destructive mt-2 uppercase tracking-widest">
+                En fazla 9 durak seçebilirsiniz
+              </p>
+            )}
+            {selectedRouteIds.length === 1 && (
+              <p className="text-center text-xs font-bold text-muted-foreground mt-2 uppercase tracking-widest">
+                Rota oluşturmak için en az 2 adres seçin
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       <Toaster />
     </main>
   );

@@ -1,7 +1,8 @@
+
 "use client";
 
 import React from "react";
-import { MapPin, Navigation, Building2, CheckCircle2, Ruler, ChevronRight } from "lucide-react";
+import { MapPin, Navigation, CheckCircle2, Ruler, ChevronRight, PlusCircle, CheckCircle } from "lucide-react";
 import type { ParsedAddress } from "@/types/address";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
@@ -12,9 +13,18 @@ import { cn } from "@/lib/utils";
 interface AddressCardProps {
   address: ParsedAddress;
   onToggleVisited: (id: string) => void;
+  isSelected?: boolean;
+  onToggleSelection?: () => void;
+  selectionOrder?: number;
 }
 
-export default function AddressCard({ address, onToggleVisited }: AddressCardProps) {
+export default function AddressCard({ 
+  address, 
+  onToggleVisited, 
+  isSelected, 
+  onToggleSelection,
+  selectionOrder 
+}: AddressCardProps) {
   const openInMaps = () => {
     const encoded = encodeURIComponent(address.streetQuery);
     const url = `https://www.google.com/maps/search/?api=1&query=${encoded}`;
@@ -25,10 +35,31 @@ export default function AddressCard({ address, onToggleVisited }: AddressCardPro
     <Card 
       className={cn(
         "p-6 flex flex-col gap-4 transition-all duration-300 border-none rounded-2xl bg-[#F9F9F9] group relative hover:bg-white ios-shadow",
-        address.visited && "opacity-70"
+        address.visited && "opacity-70",
+        isSelected && "ring-2 ring-primary bg-primary/[0.02]"
       )}
     >
-      <div className="flex justify-between items-start gap-3 w-full">
+      {/* Selection Badge */}
+      <div 
+        onClick={onToggleSelection}
+        className={cn(
+          "absolute top-4 right-4 flex items-center justify-center cursor-pointer transition-all",
+          isSelected ? "scale-110" : "opacity-40 hover:opacity-100"
+        )}
+      >
+        {isSelected ? (
+          <div className="relative">
+            <CheckCircle className="w-8 h-8 text-primary fill-primary/10" />
+            <span className="absolute inset-0 flex items-center justify-center text-[10px] font-black text-primary mt-0.5">
+              {selectionOrder}
+            </span>
+          </div>
+        ) : (
+          <PlusCircle className="w-8 h-8 text-muted-foreground" />
+        )}
+      </div>
+
+      <div className="flex justify-between items-start gap-3 w-full pr-10">
         <div className="flex items-start gap-4 flex-1 min-w-0">
           <Checkbox 
             id={`visited-${address.id}`}
@@ -84,7 +115,7 @@ export default function AddressCard({ address, onToggleVisited }: AddressCardPro
       >
         <span className="flex items-center gap-2">
           <Navigation className="w-4 h-4" />
-          Navigasyon
+          Haritada Aç
         </span>
         <ChevronRight className="w-4 h-4 opacity-50" />
       </Button>
