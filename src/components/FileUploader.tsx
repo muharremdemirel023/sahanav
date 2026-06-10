@@ -1,8 +1,7 @@
-
 "use client";
 
 import React, { useState, useRef } from "react";
-import { Upload, FileWarning, Loader2, FileText, MapPin } from "lucide-react";
+import { Upload, FileWarning, Loader2, FileText, MapPin, AlertCircle } from "lucide-react";
 import { parseAddressLine, deduplicateAddresses } from "@/lib/parser";
 import type { ParsedAddress } from "@/types/address";
 import { useToast } from "@/hooks/use-toast";
@@ -10,8 +9,8 @@ import { Card } from "./ui/card";
 import { cn } from "@/lib/utils";
 import * as pdfjs from "pdfjs-dist";
 
-// PDF Worker setup
-pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+// PDF.js worker setup - specific version targeting to avoid mismatches
+pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs`;
 
 interface FileUploaderProps {
   onDataLoaded: (data: ParsedAddress[]) => void;
@@ -20,37 +19,62 @@ interface FileUploaderProps {
 export default function FileUploader({ onDataLoaded }: FileUploaderProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   const extractTextFromPdf = async (file: File): Promise<string> => {
-    const arrayBuffer = await file.arrayBuffer();
-    const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
-    const pdf = await loadingTask.promise;
-    let fullText = "";
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const loadingTask = pdfjs.getDocument({ 
+        data: arrayBuffer,
+        useSystemFonts: true,
+        disableFontFace: false
+      });
+      
+      const pdf = await loadingTask.promise;
+      let fullText = "";
 
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const textContent = await page.getTextContent();
-      
-      let lastY;
-      let pageText = "";
-      
-      // Smart text extraction based on Y coordinates to maintain line structure
-      for (const item of textContent.items as any[]) {
-        if (lastY !== undefined && Math.abs(lastY - item.transform[5]) > 2) {
-          pageText += "\n";
-        }
-        pageText += item.str;
-        lastY = item.transform[5];
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        
+        // Items are sorted by their vertical position (Y) to maintain line structure
+        const items = textContent.items as any[];
+        
+        // Group items by their vertical position (Y coordinate is at index 5 of transform)
+        const lines: { [key: number]: string[] } = {};
+        
+        items.forEach(item => {
+          const y = Math.round(item.transform[5]);
+          if (!lines[y]) lines[y] = [];
+          lines[y].push(item.str);
+        });
+
+        // Sort Y coordinates from top to bottom
+        const sortedY = Object.keys(lines)
+          .map(Number)
+          .sort((a, b) => b - a);
+
+        const pageText = sortedY
+          .map(y => lines[y].join(" "))
+          .join("\n");
+
+        fullText += pageText + "\n";
+        
+        // Basic cleanup for the page to free memory
+        page.cleanup();
       }
-      fullText += pageText + "\n";
+      return fullText;
+    } catch (err: any) {
+      console.error("PDF Extraction error:", err);
+      throw new Error("PDF dosyası okunurken bir hata oluştu. Dosya şifreli veya bozuk olabilir.");
     }
-    return fullText;
   };
 
   const processFile = async (file: File) => {
     if (!file) return;
+    setError(null);
     
     const fileName = file.name.toLowerCase();
     const isTxt = fileName.endsWith(".txt");
@@ -74,7 +98,7 @@ export default function FileUploader({ onDataLoaded }: FileUploaderProps) {
         content = await new Promise<string>((resolve, reject) => {
           const reader = new FileReader();
           reader.onload = (e) => resolve(e.target?.result as string);
-          reader.onerror = reject;
+          reader.onerror = () => reject(new Error("TXT dosyası okunamadı."));
           reader.readAsText(file, "UTF-8");
         });
       } else if (isPdf) {
@@ -85,7 +109,11 @@ export default function FileUploader({ onDataLoaded }: FileUploaderProps) {
         throw new Error("Dosya içeriği okunamadı veya boş.");
       }
 
-      const lines = content.split(/\r?\n/).filter(line => line.trim().length > 10);
+      // PDF text can be messy, split by new lines and filter out very short junk
+      const lines = content.split(/\r?\n/)
+        .map(line => line.trim())
+        .filter(line => line.length > 15); // Addresses are usually long
+
       const results: ParsedAddress[] = [];
 
       for (const line of lines) {
@@ -96,13 +124,7 @@ export default function FileUploader({ onDataLoaded }: FileUploaderProps) {
       const cleanResults = deduplicateAddresses(results);
       
       if (cleanResults.length === 0) {
-        toast({
-          variant: "destructive",
-          title: "Veri Bulunamadı",
-          description: "Dosyada geçerli bir adres formatı tespit edilemedi.",
-        });
-        setLoading(false);
-        return;
+        throw new Error("Dosyada geçerli bir adres formatı tespit edilemedi.");
       }
 
       onDataLoaded(cleanResults);
@@ -113,47 +135,28 @@ export default function FileUploader({ onDataLoaded }: FileUploaderProps) {
       });
     } catch (err: any) {
       console.error("Processing error:", err);
+      const msg = err.message || "Dosya işlenirken bir sorun oluştu.";
+      setError(msg);
       toast({
         variant: "destructive",
         title: "Hata",
-        description: err.message || "Dosya işlenirken bir sorun oluştu.",
+        description: msg,
       });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = () => {
-    setIsDragging(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    if (e.dataTransfer.files?.length) {
-      processFile(e.dataTransfer.files[0]);
-    }
-  };
-
-  const handleZoneClick = () => {
-    fileInputRef.current?.click();
-  };
-
   return (
     <Card
       className={cn(
-        "relative border-2 border-dashed transition-all duration-300 p-12 text-center min-h-[400px] flex flex-col items-center justify-center cursor-pointer overflow-hidden z-10 group",
-        isDragging ? "border-primary bg-primary/10 shadow-lg scale-[1.01]" : "border-muted-foreground/30 hover:border-primary/50 hover:bg-muted/30"
+        "relative border-2 border-dashed transition-all duration-300 p-12 text-center min-h-[400px] flex flex-col items-center justify-center cursor-pointer overflow-hidden group",
+        isDragging ? "border-primary bg-primary/10 shadow-lg" : "border-muted-foreground/30 hover:border-primary/50 hover:bg-muted/30"
       )}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-      onClick={handleZoneClick}
+      onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+      onDragLeave={() => setIsDragging(false)}
+      onDrop={(e) => { e.preventDefault(); setIsDragging(false); if (e.dataTransfer.files?.length) processFile(e.dataTransfer.files[0]); }}
+      onClick={() => fileInputRef.current?.click()}
     >
       <input
         type="file"
@@ -166,10 +169,12 @@ export default function FileUploader({ onDataLoaded }: FileUploaderProps) {
       <div className="flex flex-col items-center gap-6 pointer-events-none relative z-20">
         <div className={cn(
           "p-6 rounded-2xl bg-primary/10 transition-all duration-500 shadow-inner",
-          isDragging && "scale-110 bg-primary/20 rotate-3"
+          isDragging && "scale-110 bg-primary/20"
         )}>
           {loading ? (
             <Loader2 className="w-16 h-16 text-primary animate-spin" />
+          ) : error ? (
+            <AlertCircle className="w-16 h-16 text-destructive" />
           ) : (
             <div className="relative">
                <Upload className="w-16 h-16 text-primary" />
@@ -179,9 +184,13 @@ export default function FileUploader({ onDataLoaded }: FileUploaderProps) {
         </div>
         
         <div className="space-y-3">
-          <h3 className="text-3xl font-black tracking-tight text-foreground">Dosya Yükle</h3>
+          <h3 className="text-3xl font-black tracking-tight text-foreground">
+            {error ? "Bir Hata Oluştu" : "Dosya Yükle"}
+          </h3>
           <p className="text-muted-foreground text-sm max-w-sm mx-auto font-medium">
-            Adresleri içeren <span className="text-primary font-bold">PDF</span> veya <span className="text-primary font-bold">TXT</span> dosyasını sürükleyin veya buraya tıklayın.
+            {error ? error : (
+              <>Adresleri içeren <span className="text-primary font-bold">PDF</span> veya <span className="text-primary font-bold">TXT</span> dosyasını sürükleyin veya buraya tıklayın.</>
+            )}
           </p>
         </div>
 
@@ -193,7 +202,7 @@ export default function FileUploader({ onDataLoaded }: FileUploaderProps) {
       </div>
       
       {loading && (
-        <div className="absolute inset-0 bg-background/90 backdrop-blur-md flex items-center justify-center z-50 animate-in fade-in duration-300">
+        <div className="absolute inset-0 bg-background/90 backdrop-blur-md flex items-center justify-center z-50">
           <div className="flex flex-col items-center gap-4 text-center p-8">
             <div className="relative">
               <Loader2 className="w-14 h-14 text-primary animate-spin" />
@@ -201,7 +210,7 @@ export default function FileUploader({ onDataLoaded }: FileUploaderProps) {
             </div>
             <div>
               <p className="font-black text-xl text-primary mb-1">Analiz Ediliyor...</p>
-              <p className="text-muted-foreground text-sm font-medium">PDF içeriği taranıyor ve adresler ayrıştırılıyor.</p>
+              <p className="text-muted-foreground text-sm font-medium">Veriler taranıyor ve adresler ayrıştırılıyor.</p>
             </div>
           </div>
         </div>

@@ -59,13 +59,14 @@ export default function SahaNav() {
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
-        setUserLocation({
+        const location = {
           lat: position.coords.latitude,
           lng: position.coords.longitude,
-        });
+        };
+        setUserLocation(location);
         toast({
           title: "Konum Alındı",
-          description: "Mesafe hesaplamaları güncelleniyor.",
+          description: "Adres uzaklıkları hesaplanıyor.",
         });
       },
       () => {
@@ -78,9 +79,9 @@ export default function SahaNav() {
     );
   };
 
-  // Geocoding addresses when user location is available
+  // Process geocoding sequentially to avoid hitting API rate limits too fast
   useEffect(() => {
-    if (!userLocation || addresses.length === 0) return;
+    if (addresses.length === 0) return;
 
     const geocodeAddresses = async () => {
       setIsGeocoding(true);
@@ -89,6 +90,17 @@ export default function SahaNav() {
 
       for (let i = 0; i < currentAddresses.length; i++) {
         const addr = currentAddresses[i];
+        
+        // Always calculate distance if userLocation exists
+        if (userLocation && addr.lat !== undefined && addr.distance === undefined) {
+          currentAddresses[i] = {
+            ...addr,
+            distance: calculateDistance(userLocation.lat, userLocation.lng, addr.lat, addr.lng)
+          };
+          updated = true;
+        }
+
+        // Geocode if missing
         if (addr.lat === undefined) {
           const coords = await getCoordinates(addr.streetQuery);
           if (coords) {
@@ -96,16 +108,10 @@ export default function SahaNav() {
               ...addr,
               lat: coords.lat,
               lng: coords.lng,
-              distance: calculateDistance(userLocation.lat, userLocation.lng, coords.lat, coords.lng)
+              distance: userLocation ? calculateDistance(userLocation.lat, userLocation.lng, coords.lat, coords.lng) : undefined
             };
             updated = true;
           }
-        } else if (addr.distance === undefined) {
-          currentAddresses[i] = {
-            ...addr,
-            distance: calculateDistance(userLocation.lat, userLocation.lng, addr.lat, addr.lng)
-          };
-          updated = true;
         }
       }
 
@@ -136,16 +142,13 @@ export default function SahaNav() {
 
     result.sort((a, b) => {
       if (sortMode === "alphabetical") return a.businessName.localeCompare(b.businessName, 'tr');
-      if (sortMode === "closest") {
-        if (a.distance === undefined) return 1;
-        if (b.distance === undefined) return -1;
-        return a.distance - b.distance;
-      }
-      if (sortMode === "furthest") {
-        if (a.distance === undefined) return 1;
-        if (b.distance === undefined) return -1;
-        return b.distance - a.distance;
-      }
+      
+      const distA = a.distance ?? Infinity;
+      const distB = b.distance ?? Infinity;
+
+      if (sortMode === "closest") return distA - distB;
+      if (sortMode === "furthest") return distB - distA;
+      
       return 0;
     });
 
@@ -221,7 +224,7 @@ export default function SahaNav() {
                 </div>
                 <Button onClick={handleGetLocation} className={cn("w-full font-bold", userLocation && "bg-green-600 hover:bg-green-700")}>
                   <Navigation2 className="w-4 h-4 mr-2" />
-                  {userLocation ? "Konum Güncellendi" : "Konumumu Kullan"}
+                  {userLocation ? "Konum Alındı" : "Konumumu Kullan"}
                 </Button>
               </div>
             </div>
@@ -259,16 +262,33 @@ export default function SahaNav() {
               {Object.entries(groupedAddresses).map(([neighborhood, list]) => {
                 const visitedCount = list.filter(a => a.visited).length;
                 const isDone = visitedCount === list.length && list.length > 0;
+                // Create a truly unique key for the accordion item
+                const accordionKey = `${selectedDistrict}-${neighborhood}`;
+                
                 return (
-                  <AccordionItem key={neighborhood} value={neighborhood} className={cn("border bg-card rounded-xl px-4", isDone && "bg-green-500/5")}>
+                  <AccordionItem 
+                    key={accordionKey} 
+                    value={accordionKey} 
+                    className={cn(
+                      "border bg-card rounded-xl overflow-hidden px-4 shadow-sm transition-colors",
+                      isDone && "bg-green-500/5 border-green-200"
+                    )}
+                  >
                     <AccordionTrigger className="hover:no-underline">
                       <div className="flex items-center gap-3 text-left">
                         <Layers className={cn("w-5 h-5", isDone ? "text-green-600" : "text-primary")} />
                         <div className="flex flex-col md:flex-row md:items-center gap-2">
                           <span className="font-bold text-lg">{neighborhood}</span>
-                          <Badge variant="secondary" className="font-bold text-[10px]">
-                            {list.length} Adres {visitedCount > 0 && `(${visitedCount} Gidildi)`}
-                          </Badge>
+                          <div className="flex gap-2">
+                            <Badge variant="secondary" className="font-bold text-[10px]">
+                              {list.length} Adres
+                            </Badge>
+                            {visitedCount > 0 && (
+                              <Badge variant="outline" className="font-bold text-[10px] border-green-600 text-green-600">
+                                {visitedCount} Gidildi
+                              </Badge>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </AccordionTrigger>
