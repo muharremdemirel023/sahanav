@@ -34,35 +34,64 @@ export default function FileUploader({ onDataLoaded }: FileUploaderProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
-  const cleanExtractedLine = (line: string): string => {
-    let cleaned = line.replace(/\s+/g, ' ').trim().toUpperCase();
-    
-    cleaned = cleaned.replace(/NO:(\d+)([A-ZÇĞİÖŞÜ\s]+MAH\.?)/gi, '$2 NO:$1');
-    cleaned = cleaned.replace(/NO:(\d+[A-Z])([A-ZÇĞİÖŞÜ\s]+MAH\.?)/gi, '$2 NO:$1');
+  const cleanExtractedLine = (line: string, searchPlate: string): string => {
+    let cleaned = line.replace(/\s+/g, ' ').trim();
+    const upperLine = cleaned.toUpperCase();
 
+    // 1. Gürültü Verilerini Temizle
     const junkPatterns = [
-      /\d{2}\.\d{2}\.\d{4}/g,
-      /EKİP YETKİLİSİ:.*$/g,
-      /ÜYE NO:.*$/g,
-      /KAMPANYA:.*$/g,
-      /LANSMAN:.*$/g,
-      /SEGMENT:.*$/g,
+      /\d{2}\.\d{2}\.\d{4}/g, // Tarihler
       /İSTANBUL/g,
-      /BÖLGE:.*$/g,
+      /BÖLGE[:\s]*[A-ZÇĞİÖŞÜ0-9\s]+/g,
+      /EKİP YETKİLİSİ[:\s]*[A-ZÇĞİÖŞÜ0-9\s]+/g,
+      /ÜYE NO[:\s]*\d+/g,
+      /KAMPANYA[:\s]*[A-ZÇĞİÖŞÜ0-9\s]+/g,
+      /LANSMAN[:\s]*[A-ZÇĞİÖŞÜ0-9\s]+/g,
+      /SEGMENT[:\s]*[A-ZÇĞİÖŞÜ0-9\s]+/g,
+      /ZİYARET ŞEKLİ[:\s]*[A-ZÇĞİÖŞÜ0-9\s]+/g,
+      /\d+\.?\d+\s*TL'YE KADAR.*/gi, // Kampanya metinleri
+      new RegExp(searchPlate.replace(/\s/g, ''), 'g'), // Plaka (yapışık)
+      new RegExp(searchPlate.replace(/(\d{2})([A-Z]+)(\d+)/, '$1 $2 $3'), 'g'), // Plaka (boşluklu)
     ];
 
+    let processed = upperLine;
     junkPatterns.forEach(pattern => {
-      cleaned = cleaned.replace(pattern, '');
+      processed = processed.replace(pattern, '');
     });
 
-    if (plate) {
-      const normalizedPlate = plate.replace(/\s+/g, '').toUpperCase();
-      cleaned = cleaned.replace(new RegExp(normalizedPlate, 'g'), '');
-      const spacePlate = plate.replace(/(\d{2})([A-Z]+)(\d+)/, '$1 $2 $3').toUpperCase();
-      cleaned = cleaned.replace(new RegExp(spacePlate, 'g'), '');
+    // 2. Yapışık Metinleri Düzelt (Glued Text)
+    processed = processed.replace(/BLK[:\s]*[A-Z]NO[:\s]*/g, ' NO:'); // BLK:ANO:94 -> NO:94
+    processed = processed.replace(/NO[:\s]*(\d+)([A-ZÇĞİÖŞÜ\s]+MAH\.?)/g, '$2 NO:$1'); // NO:161ABDURRAHMANGAZİ -> ABDURRAHMANGAZİ MAH. NO:161
+    processed = processed.replace(/NO[:\s]*(\d+[A-Z])([A-ZÇĞİÖŞÜ\s]+MAH\.?)/g, '$2 NO:$1'); 
+    processed = processed.replace(/MAH\.NO[:\s]*/g, 'MAH. NO:');
+    processed = processed.replace(/CAD\.([A-ZÇĞİÖŞÜ])/g, 'CAD. $1');
+    processed = processed.replace(/SOK\.([A-ZÇĞİÖŞÜ])/g, 'SOK. $1');
+    processed = processed.replace(/CD\.([A-ZÇĞİÖŞÜ])/g, 'CD. $1');
+    processed = processed.replace(/SK\.([A-ZÇĞİÖŞÜ])/g, 'SK. $1');
+
+    // 3. Firma ve Adres Ayrımı
+    // Genellikle adres MAHALLE ile başlar.
+    const mahIndex = processed.indexOf('MAH');
+    let firmaName = "BİLİNMEYEN FİRMA";
+    let addressPart = processed;
+
+    if (mahIndex > 10) {
+      firmaName = processed.substring(0, mahIndex).trim();
+      // Firma adından sondaki cadde/sokak isimlerini temizle (eğer mahalleyi geçip firma adına sızdıysa)
+      const addressMarkers = ["CAD", "SOK", "SK", "CD", "BULVAR", "YOLU"];
+      addressMarkers.forEach(marker => {
+        const markerIdx = firmaName.lastIndexOf(marker);
+        if (markerIdx > 10) {
+          firmaName = firmaName.substring(0, markerIdx).trim();
+        }
+      });
+      addressPart = processed.substring(firmaName.length).trim();
     }
 
-    return cleaned.replace(/\s+/g, ' ').trim();
+    // Firma adını temizle (Sondaki rakamlar vb.)
+    firmaName = firmaName.replace(/\d+$/, '').trim();
+
+    return `${firmaName} - ${addressPart}`.replace(/\s+/g, ' ').trim();
   };
 
   const extractTextFromPdf = async (file: File): Promise<string[]> => {
@@ -88,21 +117,28 @@ export default function FileUploader({ onDataLoaded }: FileUploaderProps) {
         
         if (items.length === 0) continue;
 
-        // Group items by vertical position to reconstruct rows
-        const linesMap: { [key: number]: string[] } = {};
+        // Koordinatlara göre satırları yeniden oluştur (Y ekseni)
+        const rowsMap: { [key: number]: any[] } = {};
         items.forEach(item => {
           const y = Math.round(item.transform[5]);
-          if (!linesMap[y]) linesMap[y] = [];
-          linesMap[y].push(item.str);
+          if (!rowsMap[y]) rowsMap[y] = [];
+          rowsMap[y].push(item);
         });
 
-        const sortedY = Object.keys(linesMap).map(Number).sort((a, b) => b - a);
+        // Satırları X koordinatına göre sırala ve birleştir
+        const sortedY = Object.keys(rowsMap).map(Number).sort((a, b) => b - a);
+        
         sortedY.forEach(y => {
-          const fullLine = linesMap[y].join(" ");
+          const rowItems = rowsMap[y].sort((a, b) => a.transform[4] - b.transform[4]);
+          const fullLine = rowItems.map(item => item.str).join(" ");
           const normalizedLine = fullLine.replace(/\s+/g, '').toUpperCase();
           
+          // Eğer satırda seçilen plaka varsa ve bir rota satırı gibi görünüyorsa (tarih veya İstanbul içeriyorsa)
           if (normalizedLine.includes(normalizedSearchPlate)) {
-            extractedLines.push(cleanExtractedLine(fullLine));
+            const cleaned = cleanExtractedLine(fullLine, normalizedSearchPlate);
+            if (cleaned.length > 20) {
+              extractedLines.push(cleaned);
+            }
           }
         });
       }
@@ -114,10 +150,7 @@ export default function FileUploader({ onDataLoaded }: FileUploaderProps) {
       return extractedLines;
     } catch (err: any) {
       console.error("PDF Extraction Error:", err);
-      if (err.message.includes("okuyucu") || err.message.includes("çıkarılamadı")) {
-        throw err;
-      }
-      throw new Error("PDF dosyası okunurken hata oluştu.");
+      throw err;
     }
   };
 
