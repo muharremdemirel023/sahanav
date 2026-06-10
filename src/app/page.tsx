@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useCallback } from "react";
-import { MapPin, Filter, Trash2, Layers, CheckCircle, Clock, ListChecks, Navigation2, SortAsc, LayoutGrid, FileText, Loader2 } from "lucide-react";
+import React, { useState, useMemo, useEffect } from "react";
+import { MapPin, Trash2, CheckCircle, Clock, ListChecks, Navigation2, SortAsc, LayoutGrid, Loader2 } from "lucide-react";
 import FileUploader from "@/components/FileUploader";
 import FilterBar from "@/components/FilterBar";
 import AddressCard from "@/components/AddressCard";
@@ -32,6 +32,7 @@ export default function SahaNav() {
     setAddresses(data);
     setSelectedDistrict("all");
     setSelectedNeighborhood("all");
+    setGeocodingProgress(0);
   };
 
   const clearData = () => {
@@ -68,7 +69,7 @@ export default function SahaNav() {
         setUserLocation(location);
         toast({
           title: "Konum Alındı",
-          description: "Adres uzaklıkları hesaplanıyor.",
+          description: "Mesafe hesaplamaları başlatıldı.",
         });
       },
       () => {
@@ -81,71 +82,70 @@ export default function SahaNav() {
     );
   };
 
-  // Improved geocoding logic with batching and progress tracking
+  // Improved Geocoding & Distance Calculation Engine
   useEffect(() => {
     if (addresses.length === 0) return;
 
-    const geocodeAddresses = async () => {
-      // Find addresses that need geocoding or distance update
-      const targetIndices = addresses.map((a, idx) => {
-        const needsCoords = a.lat === undefined;
-        const needsDistance = userLocation && a.lat !== undefined && a.distance === undefined;
-        return needsCoords || needsDistance ? idx : -1;
-      }).filter(idx => idx !== -1);
+    let isMounted = true;
 
-      if (targetIndices.length === 0) {
-        setIsGeocoding(false);
-        return;
-      }
-
+    const processAddresses = async () => {
       setIsGeocoding(true);
       const currentAddresses = [...addresses];
-      const BATCH_SIZE = 3;
-      let processedCount = 0;
+      let processed = 0;
 
-      for (let i = 0; i < targetIndices.length; i += BATCH_SIZE) {
-        const batch = targetIndices.slice(i, i + BATCH_SIZE);
-        let batchUpdated = false;
-
-        await Promise.all(batch.map(async (idx) => {
-          const addr = currentAddresses[idx];
-          
-          // Case 1: Already has coords, just needs distance
-          if (userLocation && addr.lat !== undefined && addr.distance === undefined) {
-            currentAddresses[idx] = {
-              ...addr,
-              distance: calculateDistance(userLocation.lat, userLocation.lng, addr.lat, addr.lng)
-            };
-            batchUpdated = true;
-          } 
-          // Case 2: Needs both coords and distance
-          else if (addr.lat === undefined) {
-            const coords = await getCoordinates(addr.streetQuery);
-            if (coords) {
-              currentAddresses[idx] = {
-                ...addr,
-                lat: coords.lat,
-                lng: coords.lng,
-                distance: userLocation ? calculateDistance(userLocation.lat, userLocation.lng, coords.lat, coords.lng) : undefined
-              };
-              batchUpdated = true;
+      // First, quickly calculate distances for items that already have coordinates
+      if (userLocation) {
+        let distancesUpdated = false;
+        for (let i = 0; i < currentAddresses.length; i++) {
+          const addr = currentAddresses[i];
+          if (addr.lat !== undefined && addr.lng !== undefined) {
+            const newDist = calculateDistance(userLocation.lat, userLocation.lng, addr.lat, addr.lng);
+            if (addr.distance !== newDist) {
+              currentAddresses[i] = { ...addr, distance: newDist };
+              distancesUpdated = true;
             }
           }
-        }));
-
-        processedCount += batch.length;
-        setGeocodingProgress(Math.round((processedCount / targetIndices.length) * 100));
-
-        // Update state in batches to keep UI responsive
-        if (batchUpdated) {
+        }
+        if (distancesUpdated && isMounted) {
           setAddresses([...currentAddresses]);
         }
       }
 
-      setIsGeocoding(false);
+      // Then, fetch coordinates for those that don't have them
+      for (let i = 0; i < currentAddresses.length; i++) {
+        if (!isMounted) break;
+        
+        const addr = currentAddresses[i];
+        if (addr.lat === undefined) {
+          const coords = await getCoordinates(addr.streetQuery);
+          if (coords && isMounted) {
+            currentAddresses[i] = {
+              ...addr,
+              lat: coords.lat,
+              lng: coords.lng,
+              distance: userLocation ? calculateDistance(userLocation.lat, userLocation.lng, coords.lat, coords.lng) : undefined
+            };
+            // Update state periodically to show progress
+            if (i % 2 === 0) {
+              setAddresses([...currentAddresses]);
+            }
+          }
+        }
+        processed++;
+        setGeocodingProgress(Math.round((processed / currentAddresses.length) * 100));
+      }
+
+      if (isMounted) {
+        setAddresses([...currentAddresses]);
+        setIsGeocoding(false);
+      }
     };
 
-    geocodeAddresses();
+    processAddresses();
+
+    return () => {
+      isMounted = false;
+    };
   }, [userLocation, addresses.length]);
 
   const districts = useMemo(() => {
@@ -168,10 +168,17 @@ export default function SahaNav() {
 
     result.sort((a, b) => {
       if (sortMode === "alphabetical") return a.businessName.localeCompare(b.businessName, 'tr');
-      const distA = a.distance ?? Infinity;
-      const distB = b.distance ?? Infinity;
+      
+      // Items without distance should always be at the end
+      const distA = a.distance === undefined ? Infinity : a.distance;
+      const distB = b.distance === undefined ? Infinity : b.distance;
+
       if (sortMode === "closest") return distA - distB;
-      if (sortMode === "furthest") return distB - distA;
+      if (sortMode === "furthest") {
+        if (distA === Infinity) return 1;
+        if (distB === Infinity) return -1;
+        return distB - distA;
+      }
       return 0;
     });
 
@@ -201,7 +208,7 @@ export default function SahaNav() {
           <div className="flex items-center gap-3">
             {isGeocoding && (
               <div className="hidden md:flex flex-col items-end gap-1 min-w-[120px]">
-                <span className="text-[10px] font-bold text-primary animate-pulse uppercase tracking-wider">KONUM ANALİZİ %{geocodingProgress}</span>
+                <span className="text-[10px] font-bold text-primary animate-pulse uppercase tracking-wider">MESAFE ÖLÇÜLÜYOR %{geocodingProgress}</span>
                 <Progress value={geocodingProgress} className="h-1.5 w-full bg-primary/10" />
               </div>
             )}
@@ -233,7 +240,7 @@ export default function SahaNav() {
                 { label: "TOPLAM", value: stats.total, color: "bg-blue-500", icon: ListChecks },
                 { label: "GİDİLEN", value: stats.visited, color: "bg-green-500", icon: CheckCircle },
                 { label: "KALAN", value: stats.remaining, color: "bg-orange-500", icon: Clock },
-                { label: "KONUM", value: stats.geocoded, color: "bg-purple-500", icon: MapPin },
+                { label: "MESAFE", value: stats.geocoded, color: "bg-purple-500", icon: MapPin },
               ].map((stat, i) => (
                 <div key={i} className="ios-card p-5 flex flex-col items-center text-center gap-2">
                   <div className={cn("p-2 rounded-full text-white mb-1", stat.color)}>
@@ -283,6 +290,7 @@ export default function SahaNav() {
                 </div>
                 <Button 
                   onClick={handleGetLocation} 
+                  disabled={isGeocoding}
                   className={cn(
                     "w-full h-12 rounded-xl font-bold ios-button shadow-none",
                     userLocation ? "bg-green-500 hover:bg-green-600" : "bg-primary hover:bg-primary/90"
@@ -293,7 +301,7 @@ export default function SahaNav() {
                   ) : (
                     <Navigation2 className="w-4 h-4 mr-2" />
                   )}
-                  {userLocation ? "Konum Aktif" : "Konumumu Kullan"}
+                  {isGeocoding ? `Hesaplanıyor %${geocodingProgress}` : userLocation ? "Konum Güncelle" : "Konumumu Kullan"}
                 </Button>
               </div>
             </section>
