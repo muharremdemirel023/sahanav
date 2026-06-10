@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import { MapPin, Filter, Trash2, Layers, CheckCircle, Clock, ListChecks, Navigation2, SortAsc } from "lucide-react";
+import { MapPin, Filter, Trash2, Layers, CheckCircle, Clock, ListChecks, Navigation2, SortAsc, LayoutGrid, FileText } from "lucide-react";
 import FileUploader from "@/components/FileUploader";
 import FilterBar from "@/components/FilterBar";
 import AddressCard from "@/components/AddressCard";
@@ -79,7 +79,6 @@ export default function SahaNav() {
     );
   };
 
-  // Process geocoding sequentially to avoid hitting API rate limits too fast
   useEffect(() => {
     if (addresses.length === 0) return;
 
@@ -91,7 +90,6 @@ export default function SahaNav() {
       for (let i = 0; i < currentAddresses.length; i++) {
         const addr = currentAddresses[i];
         
-        // Always calculate distance if userLocation exists
         if (userLocation && addr.lat !== undefined && addr.distance === undefined) {
           currentAddresses[i] = {
             ...addr,
@@ -100,7 +98,6 @@ export default function SahaNav() {
           updated = true;
         }
 
-        // Geocode if missing
         if (addr.lat === undefined) {
           const coords = await getCoordinates(addr.streetQuery);
           if (coords) {
@@ -142,13 +139,10 @@ export default function SahaNav() {
 
     result.sort((a, b) => {
       if (sortMode === "alphabetical") return a.businessName.localeCompare(b.businessName, 'tr');
-      
       const distA = a.distance ?? Infinity;
       const distB = b.distance ?? Infinity;
-
       if (sortMode === "closest") return distA - distB;
       if (sortMode === "furthest") return distB - distA;
-      
       return 0;
     });
 
@@ -163,31 +157,59 @@ export default function SahaNav() {
     const total = filteredAndSortedAddresses.length;
     const visited = filteredAndSortedAddresses.filter(a => a.visited).length;
     const geocoded = filteredAndSortedAddresses.filter(a => a.lat !== undefined).length;
-    const closest = filteredAndSortedAddresses.find(a => a.distance !== undefined)?.distance;
     
-    return { total, visited, remaining: total - visited, geocoded, closest };
+    return { total, visited, remaining: total - visited, geocoded };
   }, [filteredAndSortedAddresses]);
 
   return (
-    <main className="min-h-screen bg-background pb-12">
-      <header className="bg-primary text-primary-foreground py-10 px-6 shadow-xl relative overflow-hidden">
-        <div className="max-w-4xl mx-auto relative z-10">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="bg-white p-2 rounded-xl">
-               <MapPin className="w-8 h-8 text-primary" />
-            </div>
-            <h1 className="text-4xl font-black tracking-tight">SahaNav</h1>
+    <main className="min-h-screen bg-[#F2F2F7]">
+      <header className="sticky top-0 z-50 ios-glass border-b pt-12 pb-6 px-6">
+        <div className="max-w-4xl mx-auto flex justify-between items-end">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-foreground">SahaNav</h1>
+            <p className="text-sm font-medium text-muted-foreground">Navigasyon ve Rota Yönetimi</p>
           </div>
-          <p className="text-primary-foreground/80 font-medium">Adres Gruplandırma ve Navigasyon</p>
+          {addresses.length > 0 && (
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={clearData} 
+              className="text-destructive font-semibold hover:bg-destructive/10"
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              Sıfırla
+            </Button>
+          )}
         </div>
       </header>
 
-      <div className="max-w-4xl mx-auto px-6 -mt-8 space-y-6 relative z-20">
+      <div className="max-w-4xl mx-auto px-6 py-8 space-y-8">
         {addresses.length === 0 ? (
-          <FileUploader onDataLoaded={handleDataLoaded} />
+          <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <FileUploader onDataLoaded={handleDataLoaded} />
+          </div>
         ) : (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="space-y-8 animate-in fade-in duration-700">
+            {/* Stats Dashboard */}
+            <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {[
+                { label: "TOPLAM", value: stats.total, color: "bg-blue-500", icon: ListChecks },
+                { label: "GİDİLEN", value: stats.visited, color: "bg-green-500", icon: CheckCircle },
+                { label: "KALAN", value: stats.remaining, color: "bg-orange-500", icon: Clock },
+                { label: "KONUM", value: stats.geocoded, color: "bg-purple-500", icon: MapPin },
+              ].map((stat, i) => (
+                <div key={i} className="ios-card p-5 flex flex-col items-center text-center gap-2">
+                  <div className={cn("p-2 rounded-full text-white mb-1", stat.color)}>
+                    <stat.icon className="w-4 h-4" />
+                  </div>
+                  <span className="text-2xl font-bold tracking-tight">{stat.value}</span>
+                  <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">{stat.label}</span>
+                </div>
+              ))}
+            </section>
+
+            {/* Controls */}
+            <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="md:col-span-2">
                 <FilterBar
                   districts={districts}
@@ -205,13 +227,13 @@ export default function SahaNav() {
                   }}
                 />
               </div>
-              <div className="bg-card p-6 rounded-xl border flex flex-col justify-center gap-4">
-                <div className="space-y-1">
-                  <span className="text-[10px] font-bold uppercase text-muted-foreground">Sıralama</span>
+              <div className="ios-card p-6 flex flex-col gap-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-muted-foreground uppercase ml-1">SIRALAMA</label>
                   <Select value={sortMode} onValueChange={(v) => setSortMode(v as SortMode)}>
-                    <SelectTrigger>
+                    <SelectTrigger className="bg-[#F2F2F7] border-none h-12 rounded-xl focus:ring-0">
                       <div className="flex items-center gap-2">
-                        <SortAsc className="w-4 h-4" />
+                        <SortAsc className="w-4 h-4 text-primary" />
                         <SelectValue />
                       </div>
                     </SelectTrigger>
@@ -222,47 +244,24 @@ export default function SahaNav() {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button onClick={handleGetLocation} className={cn("w-full font-bold", userLocation && "bg-green-600 hover:bg-green-700")}>
+                <Button 
+                  onClick={handleGetLocation} 
+                  className={cn(
+                    "w-full h-12 rounded-xl font-bold ios-button shadow-none",
+                    userLocation ? "bg-green-500 hover:bg-green-600" : "bg-primary hover:bg-primary/90"
+                  )}
+                >
                   <Navigation2 className="w-4 h-4 mr-2" />
-                  {userLocation ? "Konum Alındı" : "Konumumu Kullan"}
+                  {userLocation ? "Konum Aktif" : "Konumumu Kullan"}
                 </Button>
               </div>
-            </div>
+            </section>
 
-            <div className="bg-card rounded-xl border shadow-sm overflow-hidden">
-              <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0">
-                <div className="p-4 flex flex-col items-center justify-center bg-primary/5">
-                  <span className="text-[10px] font-black text-primary uppercase mb-1">Toplam</span>
-                  <span className="text-2xl font-black">{stats.total}</span>
-                </div>
-                <div className="p-4 flex flex-col items-center justify-center bg-green-500/5">
-                  <span className="text-[10px] font-black text-green-600 uppercase mb-1">Gidilen</span>
-                  <span className="text-2xl font-black">{stats.visited}</span>
-                </div>
-                <div className="p-4 flex flex-col items-center justify-center bg-orange-500/5">
-                  <span className="text-[10px] font-black text-orange-600 uppercase mb-1">Konum Alınan</span>
-                  <span className="text-2xl font-black">{stats.geocoded}</span>
-                </div>
-                <div className="p-4 flex flex-col items-center justify-center bg-accent/5">
-                  <span className="text-[10px] font-black text-accent uppercase mb-1">Kalan</span>
-                  <span className="text-2xl font-black">{stats.remaining}</span>
-                </div>
-              </div>
-              <div className="p-2 bg-muted/30 flex justify-between items-center px-4">
-                <span className="text-[10px] font-bold text-muted-foreground italic">
-                  {isGeocoding ? "Uzaklıklar hesaplanıyor..." : userLocation ? "Uzaklıklar güncel." : "Mesafe için konum izni verin."}
-                </span>
-                <Button variant="ghost" size="sm" onClick={clearData} className="text-destructive h-8 font-bold text-xs">
-                  <Trash2 className="w-3.5 h-3.5 mr-1" /> Temizle
-                </Button>
-              </div>
-            </div>
-
-            <Accordion type="multiple" className="space-y-4">
+            {/* List */}
+            <Accordion type="multiple" defaultValue={Object.keys(groupedAddresses).map(n => `${selectedDistrict}-${n}`)} className="space-y-4">
               {Object.entries(groupedAddresses).map(([neighborhood, list]) => {
                 const visitedCount = list.filter(a => a.visited).length;
                 const isDone = visitedCount === list.length && list.length > 0;
-                // Create a truly unique key for the accordion item
                 const accordionKey = `${selectedDistrict}-${neighborhood}`;
                 
                 return (
@@ -270,29 +269,30 @@ export default function SahaNav() {
                     key={accordionKey} 
                     value={accordionKey} 
                     className={cn(
-                      "border bg-card rounded-xl overflow-hidden px-4 shadow-sm transition-colors",
-                      isDone && "bg-green-500/5 border-green-200"
+                      "ios-card px-4 border-none transition-all",
+                      isDone && "opacity-60 grayscale-[0.5]"
                     )}
                   >
-                    <AccordionTrigger className="hover:no-underline">
-                      <div className="flex items-center gap-3 text-left">
-                        <Layers className={cn("w-5 h-5", isDone ? "text-green-600" : "text-primary")} />
-                        <div className="flex flex-col md:flex-row md:items-center gap-2">
-                          <span className="font-bold text-lg">{neighborhood}</span>
-                          <div className="flex gap-2">
-                            <Badge variant="secondary" className="font-bold text-[10px]">
-                              {list.length} Adres
-                            </Badge>
+                    <AccordionTrigger className="hover:no-underline py-5">
+                      <div className="flex items-center gap-4 text-left">
+                        <div className={cn(
+                          "w-10 h-10 rounded-xl flex items-center justify-center transition-colors",
+                          isDone ? "bg-green-500/10 text-green-600" : "bg-primary/10 text-primary"
+                        )}>
+                          <LayoutGrid className="w-5 h-5" />
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="font-bold text-lg leading-tight">{neighborhood}</span>
+                          <div className="flex gap-2 mt-1">
+                            <span className="text-xs font-medium text-muted-foreground">{list.length} Adres</span>
                             {visitedCount > 0 && (
-                              <Badge variant="outline" className="font-bold text-[10px] border-green-600 text-green-600">
-                                {visitedCount} Gidildi
-                              </Badge>
+                              <span className="text-xs font-bold text-green-600">• {visitedCount} Gidildi</span>
                             )}
                           </div>
                         </div>
                       </div>
                     </AccordionTrigger>
-                    <AccordionContent className="pb-4">
+                    <AccordionContent className="pb-6">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
                         {list.map((addr) => (
                           <AddressCard key={addr.id} address={addr} onToggleVisited={toggleVisited} />

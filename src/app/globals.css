@@ -4,47 +4,47 @@
 
 @layer base {
   :root {
-    --background: 220 33% 97%;
+    --background: 210 20% 98%;
     --foreground: 226 71% 10%;
     --card: 0 0% 100%;
     --card-foreground: 226 71% 10%;
     --popover: 0 0% 100%;
     --popover-foreground: 226 71% 10%;
-    --primary: 226 71% 40%;
+    --primary: 215 100% 50%; /* iOS Blue */
     --primary-foreground: 0 0% 100%;
-    --secondary: 220 20% 90%;
+    --secondary: 210 20% 95%;
     --secondary-foreground: 226 71% 20%;
-    --muted: 220 10% 92%;
-    --muted-foreground: 226 20% 40%;
-    --accent: 191 91% 36%;
+    --muted: 210 20% 95%;
+    --muted-foreground: 226 20% 50%;
+    --accent: 215 100% 50%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
-    --border: 226 20% 85%;
-    --input: 226 20% 85%;
-    --ring: 226 71% 40%;
-    --radius: 0.75rem;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 215 100% 50%;
+    --radius: 1.25rem;
   }
   .dark {
-    --background: 226 71% 5%;
+    --background: 226 71% 2%;
     --foreground: 0 0% 98%;
-    --card: 226 71% 7%;
+    --card: 226 71% 5%;
     --card-foreground: 0 0% 98%;
-    --popover: 226 71% 7%;
+    --popover: 226 71% 5%;
     --popover-foreground: 0 0% 98%;
-    --primary: 226 71% 50%;
+    --primary: 215 100% 60%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 226 30% 15%;
+    --secondary: 226 30% 10%;
     --secondary-foreground: 0 0% 98%;
-    --muted: 226 30% 15%;
-    --muted-foreground: 226 20% 70%;
-    --accent: 191 91% 45%;
+    --muted: 226 30% 10%;
+    --muted-foreground: 226 20% 60%;
+    --accent: 215 100% 60%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
-    --border: 226 30% 20%;
-    --input: 226 30% 20%;
-    --ring: 226 71% 50%;
+    --border: 226 30% 15%;
+    --input: 226 30% 15%;
+    --ring: 215 100% 60%;
   }
 }
 
@@ -55,5 +55,22 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
+    -webkit-font-smoothing: antialiased;
   }
+}
+
+.ios-glass {
+  @apply bg-white/70 backdrop-blur-xl border-white/20;
+}
+
+.ios-shadow {
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.04);
+}
+
+.ios-card {
+  @apply ios-shadow border bg-card rounded-[1.5rem] transition-all duration-300;
+}
+
+.ios-button {
+  @apply rounded-full font-semibold transition-all active:scale-95;
 }
