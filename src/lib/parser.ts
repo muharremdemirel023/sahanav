@@ -2,7 +2,7 @@ import { SUPPORTED_DISTRICTS } from './constants';
 import type { ParsedAddress } from '@/types/address';
 
 /**
- * Generates a unique ID with a fallback for non-secure contexts.
+ * Generates a unique ID with a robust fallback for non-secure contexts.
  */
 function generateId(): string {
   try {
@@ -10,9 +10,9 @@ function generateId(): string {
       return crypto.randomUUID();
     }
   } catch (e) {
-    // Fallback to random string
+    // Fallback if randomUUID is not available
   }
-  return 'id-' + Math.random().toString(36).substring(2, 15) + Date.now().toString(36);
+  return 'id-' + Math.random().toString(36).substring(2, 11) + '-' + Date.now().toString(36);
 }
 
 /**
@@ -23,7 +23,9 @@ export function extractNeighborhood(addressLine: string): string | null {
   const neighborhoodRegex = /([A-ZÇĞİÖŞÜ0-9\s]+)\s+MAH\.?/i;
   const match = addressLine.match(neighborhoodRegex);
   if (match && match[1]) {
-    return match[1].trim().toUpperCase();
+    const name = match[1].trim().toUpperCase();
+    // Prevent common false positives
+    if (name.length > 2) return name;
   }
   return null;
 }
@@ -91,7 +93,7 @@ export function groupAddressesByNeighborhood(addresses: ParsedAddress[]): Record
  */
 export function parseAddressLine(line: string): ParsedAddress | null {
   const cleanLine = line.trim();
-  if (!cleanLine) return null;
+  if (!cleanLine || cleanLine.length < 5) return null;
 
   const upperLine = cleanLine.toUpperCase();
 
@@ -111,7 +113,9 @@ export function parseAddressLine(line: string): ParsedAddress | null {
   const streetQuery = buildGoogleMapsQuery(cleanLine, detectedDistrict);
 
   // Business name detection (basic - everything before first address keyword)
-  const businessName = cleanLine.split(/(?:CAD|SOK|MAH|NO)/i)[0].trim() || 'İşletme Adı Yok';
+  // Split by keywords but keep a default if nothing matches
+  const businessParts = cleanLine.split(/(?:CAD|SOK|MAH|NO|SOK|SK)/i);
+  const businessName = (businessParts[0] && businessParts[0].trim()) || 'İşletme Adı Yok';
 
   return {
     id: generateId(),
@@ -125,12 +129,12 @@ export function parseAddressLine(line: string): ParsedAddress | null {
 }
 
 /**
- * Removes duplicate address entries.
+ * Removes duplicate address entries based on address string.
  */
 export function deduplicateAddresses(addresses: ParsedAddress[]): ParsedAddress[] {
   const seen = new Set<string>();
   return addresses.filter((addr) => {
-    const key = `${addr.businessName}-${addr.fullAddress}`.toLowerCase().replace(/\s+/g, '');
+    const key = addr.fullAddress.toLowerCase().replace(/\s+/g, '');
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
