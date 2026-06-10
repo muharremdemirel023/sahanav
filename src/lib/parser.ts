@@ -1,4 +1,3 @@
-
 import { SUPPORTED_DISTRICTS } from './constants';
 import type { ParsedAddress } from '@/types/address';
 
@@ -11,7 +10,7 @@ function generateId(): string {
       return crypto.randomUUID();
     }
   } catch (e) {
-    // Fallback if randomUUID is not available
+    // Fallback
   }
   return 'id-' + Math.random().toString(36).substring(2, 11) + '-' + Date.now().toString(36);
 }
@@ -25,7 +24,6 @@ export function extractNeighborhood(addressLine: string): string | null {
   const match = addressLine.match(neighborhoodRegex);
   if (match && match[1]) {
     const name = match[1].trim().toUpperCase();
-    // Prevent common false positives and ensure it's not too long/short
     if (name.length > 2 && name.length < 30) return name;
   }
   return null;
@@ -33,21 +31,17 @@ export function extractNeighborhood(addressLine: string): string | null {
 
 /**
  * Builds an optimized Google Maps search query based on navigation rules.
- * Priority: Street > Avenue. Includes Door Number. Excludes Neighborhood/Flat details.
  */
 export function buildGoogleMapsQuery(line: string, detectedDistrict: string): string {
   const upperLine = line.toUpperCase().trim();
   
-  // 1. Extract Door Number: NO:20, NO 20, NO:20/A, NO:113B etc.
   const doorNoRegex = /(?:NO|NO:|N)\s*(\d+(?:\/[A-Z0-9]+|[A-Z])?)/i;
   const doorNoMatch = upperLine.match(doorNoRegex);
   const doorNo = doorNoMatch ? doorNoMatch[1].trim() : "";
 
-  // 2. Extract Street (Prioritize SOKAK/SK/SOK)
   const streetRegex = /((?:[A-ZÇĞİÖŞÜ0-9]+\s+){1,2})(?:SOKAK|SOK|SK)\.?/i;
   const streetMatch = upperLine.match(streetRegex);
   
-  // 3. Extract Avenue (CADDE/CAD/CD)
   const avenueRegex = /((?:[A-ZÇĞİÖŞÜ0-9]+\s+){1,2})(?:CADDE|CAD|CD)\.?/i;
   const avenueMatch = upperLine.match(avenueRegex);
 
@@ -58,7 +52,6 @@ export function buildGoogleMapsQuery(line: string, detectedDistrict: string): st
     mainPath = `${avenueMatch[1].trim()} CADDESİ`;
   }
 
-  // Fallback: if no clear street/avenue detected, use the part before district
   if (!mainPath) {
     const parts = upperLine.split(/(?:MAH|İSTANBUL)/i);
     const fallbackPath = parts[0].trim();
@@ -66,28 +59,40 @@ export function buildGoogleMapsQuery(line: string, detectedDistrict: string): st
   }
 
   const districtStr = detectedDistrict !== 'DİĞER' ? detectedDistrict : 'SULTANBEYLİ';
-  
-  // Format: [SOKAK VEYA CADDE] + [KAPI NO] + [DISTRICT] + İSTANBUL
   const doorNoStr = doorNo ? doorNo : "";
   return `${mainPath} ${doorNoStr} ${districtStr} İSTANBUL`.replace(/\s+/g, ' ').trim();
 }
 
 /**
  * Groups ParsedAddress objects by neighborhood.
+ * Ensures consistent key normalization to prevent duplicate group items.
  */
 export function groupAddressesByNeighborhood(addresses: ParsedAddress[]): Record<string, ParsedAddress[]> {
   const groups: Record<string, ParsedAddress[]> = {};
   const UNKNOWN_GROUP = "Mahalle Tespit Edilemeyenler";
 
   addresses.forEach((addr) => {
-    const neighborhood = addr.neighborhood !== 'BİLİNMEYEN' ? `${addr.neighborhood} MAH.` : UNKNOWN_GROUP;
-    if (!groups[neighborhood]) {
-      groups[neighborhood] = [];
+    // Strict normalization: trim and uppercase
+    const neighborhoodName = addr.neighborhood && addr.neighborhood !== 'BİLİNMEYEN' 
+      ? addr.neighborhood.trim().toUpperCase() 
+      : null;
+    
+    const groupKey = neighborhoodName ? `${neighborhoodName} MAH.` : UNKNOWN_GROUP;
+    
+    if (!groups[groupKey]) {
+      groups[groupKey] = [];
     }
-    groups[neighborhood].push(addr);
+    groups[groupKey].push(addr);
   });
 
-  return groups;
+  // Sort groups by name (optional but better for UI consistency)
+  const sortedKeys = Object.keys(groups).sort();
+  const sortedGroups: Record<string, ParsedAddress[]> = {};
+  sortedKeys.forEach(key => {
+    sortedGroups[key] = groups[key];
+  });
+
+  return sortedGroups;
 }
 
 /**
@@ -95,12 +100,10 @@ export function groupAddressesByNeighborhood(addresses: ParsedAddress[]): Record
  */
 export function parseAddressLine(line: string): ParsedAddress | null {
   const cleanLine = line.trim();
-  // Basic filter for noise (often found in PDFs)
   if (!cleanLine || cleanLine.length < 15) return null;
 
   const upperLine = cleanLine.toUpperCase();
 
-  // 1. Detect District
   let detectedDistrict = 'DİĞER';
   for (const district of SUPPORTED_DISTRICTS) {
     if (upperLine.includes(district)) {
@@ -109,19 +112,11 @@ export function parseAddressLine(line: string): ParsedAddress | null {
     }
   }
 
-  // 2. Detect Neighborhood
   const neighborhood = extractNeighborhood(cleanLine) || 'BİLİNMEYEN';
-  
-  // 3. Build optimized navigation query for Google Maps
   const streetQuery = buildGoogleMapsQuery(cleanLine, detectedDistrict);
 
-  // Business name detection
-  // PDF extract might contain headers, try to isolate the business name
-  // It's usually the first part of the line before common address indicators
   const businessParts = cleanLine.split(/(?:MAHALLE|MAH\.|CAD|SOK|NO|SOK|SK)/i);
   let businessName = (businessParts[0] && businessParts[0].trim()) || 'İşletme Adı Yok';
-  
-  // Clean up common PDF noise from business name
   businessName = businessName.replace(/^\d+[\.\s-]/, '').trim(); 
 
   return {
@@ -129,7 +124,7 @@ export function parseAddressLine(line: string): ParsedAddress | null {
     businessName: businessName.length > 2 ? businessName : 'İşletme Adı Yok',
     fullAddress: cleanLine,
     district: detectedDistrict,
-    neighborhood,
+    neighborhood: neighborhood.toUpperCase(), // Ensure normalized case
     streetQuery,
     visited: false,
   };
@@ -141,7 +136,6 @@ export function parseAddressLine(line: string): ParsedAddress | null {
 export function deduplicateAddresses(addresses: ParsedAddress[]): ParsedAddress[] {
   const seen = new Set<string>();
   return addresses.filter((addr) => {
-    // Normalize address for more accurate deduplication
     const key = addr.fullAddress.toLowerCase().replace(/[^a-z0-9]/g, '');
     if (seen.has(key)) return false;
     seen.add(key);

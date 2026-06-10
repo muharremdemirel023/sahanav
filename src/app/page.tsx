@@ -65,7 +65,6 @@ export default function SahaNav() {
     );
   };
 
-  // TURBO Geocoding Engine with Parallel Batching
   useEffect(() => {
     if (addresses.length === 0) return;
 
@@ -75,7 +74,6 @@ export default function SahaNav() {
       setIsGeocoding(true);
       const currentAddresses = [...addresses];
       
-      // 1. PHASE: Instant cache check and distance calculation for already known points
       let needsUpdate = false;
       for (let i = 0; i < currentAddresses.length; i++) {
         const addr = currentAddresses[i];
@@ -89,8 +87,7 @@ export default function SahaNav() {
       }
       if (needsUpdate && isMounted) setAddresses([...currentAddresses]);
 
-      // 2. PHASE: Batch Geocoding (Concurrency for Speed)
-      const batchSize = 10; // Process 10 addresses at once
+      const batchSize = 10;
       let processed = 0;
 
       for (let i = 0; i < currentAddresses.length; i += batchSize) {
@@ -100,7 +97,6 @@ export default function SahaNav() {
         const results = await Promise.all(batch.map(async (addr, index) => {
           if (addr.lat !== undefined) return addr;
           
-          // Small staggered delay to prevent instant 429 from API
           const coords = await getCoordinates(addr.streetQuery, 100 + (index * 50));
           
           if (coords) {
@@ -114,7 +110,6 @@ export default function SahaNav() {
           return addr;
         }));
 
-        // Apply results to the main array
         results.forEach((res, index) => {
           currentAddresses[i + index] = res;
         });
@@ -122,7 +117,6 @@ export default function SahaNav() {
         processed += batch.length;
         if (isMounted) {
           setGeocodingProgress(Math.round((processed / currentAddresses.length) * 100));
-          // Throttle state updates for UI performance
           if (i % 20 === 0 || processed >= currentAddresses.length) {
             setAddresses([...currentAddresses]);
           }
@@ -203,7 +197,7 @@ export default function SahaNav() {
                 { label: "TOPLAM", value: stats.total, color: "bg-blue-500", icon: ListChecks },
                 { label: "GİDİLEN", value: stats.visited, color: "bg-green-500", icon: CheckCircle },
                 { label: "ÖLÇÜLEN", value: stats.geocoded, color: "bg-purple-500", icon: MapPin },
-                { label: "EN YAKIN", value: stats.closest > 0 ? `${stats.closest.toFixed(1)} km` : '-', color: "bg-orange-500", icon: Navigation2 },
+                { label: "EN YAKIN", value: (stats.closest > 0 && stats.closest !== Infinity) ? `${stats.closest.toFixed(1)} km` : '-', color: "bg-orange-500", icon: Navigation2 },
               ].map((stat, i) => (
                 <div key={i} className="ios-card p-5 flex flex-col items-center text-center gap-1">
                   <div className={cn("p-2 rounded-full text-white mb-1", stat.color)}>
@@ -248,7 +242,7 @@ export default function SahaNav() {
               </div>
             </section>
 
-            <Accordion type="multiple" defaultValue={Object.keys(groupedAddresses).map(n => n)} className="space-y-4">
+            <Accordion type="multiple" className="space-y-4">
               {Object.entries(groupedAddresses).map(([neighborhood, list]) => {
                 const isDone = list.every(a => a.visited) && list.length > 0;
                 return (
