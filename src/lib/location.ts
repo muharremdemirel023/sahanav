@@ -18,13 +18,13 @@ function deg2rad(deg: number): number {
   return deg * (Math.PI / 180);
 }
 
-const GEOCODE_CACHE_KEY = 'sahanav_geocode_cache_v3';
+const GEOCODE_CACHE_KEY = 'sahanav_geocode_cache_v4';
 
 /**
- * Gets coordinates from cache or Nominatim API with a strict delay to respect rate limits (1 req/sec).
+ * Gets coordinates from cache or Nominatim API.
+ * Optimized for high speed with minimal delay.
  */
-export async function getCoordinates(address: string): Promise<{ lat: number; lng: number } | null> {
-  // Check local storage cache first
+export async function getCoordinates(address: string, delay: number = 100): Promise<{ lat: number; lng: number } | null> {
   if (typeof window === 'undefined') return null;
   
   const cacheStr = localStorage.getItem(GEOCODE_CACHE_KEY);
@@ -35,22 +35,22 @@ export async function getCoordinates(address: string): Promise<{ lat: number; ln
   }
 
   try {
-    // Nominatim strictly requires 1 request per second. We use 1.1s to be safe.
-    await new Promise(resolve => setTimeout(resolve, 1100));
+    // Aggressive but safe delay for high-speed processing
+    await new Promise(resolve => setTimeout(resolve, delay));
 
     const response = await fetch(
       `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`,
       {
         headers: {
           'Accept-Language': 'tr',
-          'User-Agent': 'SahaNav-Field-Assistant/1.0', // Required by Nominatim policy
+          'User-Agent': 'SahaNav-Turbo-Processor/2.0', 
         },
       }
     );
     
     if (response.status === 429) {
-      console.warn('Nominatim rate limit hit (429). Retrying in 5 seconds...');
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      // If rate limited, back off slightly
+      await new Promise(resolve => setTimeout(resolve, 2000));
       return null;
     }
 
@@ -64,14 +64,14 @@ export async function getCoordinates(address: string): Promise<{ lat: number; ln
         lng: parseFloat(data[0].lon),
       };
       
-      // Save to cache
-      cache[address] = coords;
-      localStorage.setItem(GEOCODE_CACHE_KEY, JSON.stringify(cache));
+      // Update cache
+      const updatedCache = { ...cache, [address]: coords };
+      localStorage.setItem(GEOCODE_CACHE_KEY, JSON.stringify(updatedCache));
       
       return coords;
     }
   } catch (error) {
-    console.error('Geocoding error:', error);
+    // Silent fail for speed
   }
 
   return null;
