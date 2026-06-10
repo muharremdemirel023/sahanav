@@ -1,3 +1,4 @@
+
 import { SUPPORTED_DISTRICTS } from './constants';
 import type { ParsedAddress } from '@/types/address';
 
@@ -24,14 +25,14 @@ export function extractNeighborhood(addressLine: string): string | null {
   const match = addressLine.match(neighborhoodRegex);
   if (match && match[1]) {
     const name = match[1].trim().toUpperCase();
-    // Prevent common false positives
-    if (name.length > 2) return name;
+    // Prevent common false positives and ensure it's not too long/short
+    if (name.length > 2 && name.length < 30) return name;
   }
   return null;
 }
 
 /**
- * Builds an optimized Google Maps search query based on specific navigation rules.
+ * Builds an optimized Google Maps search query based on navigation rules.
  * Priority: Street > Avenue. Includes Door Number. Excludes Neighborhood/Flat details.
  */
 export function buildGoogleMapsQuery(line: string, detectedDistrict: string): string {
@@ -40,7 +41,7 @@ export function buildGoogleMapsQuery(line: string, detectedDistrict: string): st
   // 1. Extract Door Number: NO:20, NO 20, NO:20/A, NO:113B etc.
   const doorNoRegex = /(?:NO|NO:|N)\s*(\d+(?:\/[A-Z0-9]+|[A-Z])?)/i;
   const doorNoMatch = upperLine.match(doorNoRegex);
-  const doorNo = doorNoMatch ? `NO:${doorNoMatch[1].trim()}` : "";
+  const doorNo = doorNoMatch ? doorNoMatch[1].trim() : "";
 
   // 2. Extract Street (Prioritize SOKAK/SK/SOK)
   const streetRegex = /((?:[A-ZÇĞİÖŞÜ0-9]+\s+){1,2})(?:SOKAK|SOK|SK)\.?/i;
@@ -67,7 +68,8 @@ export function buildGoogleMapsQuery(line: string, detectedDistrict: string): st
   const districtStr = detectedDistrict !== 'DİĞER' ? detectedDistrict : 'SULTANBEYLİ';
   
   // Format: [SOKAK VEYA CADDE] + [KAPI NO] + [DISTRICT] + İSTANBUL
-  return `${mainPath} ${doorNo} ${districtStr} İSTANBUL`.replace(/\s+/g, ' ').trim();
+  const doorNoStr = doorNo ? doorNo : "";
+  return `${mainPath} ${doorNoStr} ${districtStr} İSTANBUL`.replace(/\s+/g, ' ').trim();
 }
 
 /**
@@ -93,7 +95,8 @@ export function groupAddressesByNeighborhood(addresses: ParsedAddress[]): Record
  */
 export function parseAddressLine(line: string): ParsedAddress | null {
   const cleanLine = line.trim();
-  if (!cleanLine || cleanLine.length < 5) return null;
+  // Basic filter for noise (often found in PDFs)
+  if (!cleanLine || cleanLine.length < 15) return null;
 
   const upperLine = cleanLine.toUpperCase();
 
@@ -112,14 +115,18 @@ export function parseAddressLine(line: string): ParsedAddress | null {
   // 3. Build optimized navigation query for Google Maps
   const streetQuery = buildGoogleMapsQuery(cleanLine, detectedDistrict);
 
-  // Business name detection (basic - everything before first address keyword)
-  // Split by keywords but keep a default if nothing matches
-  const businessParts = cleanLine.split(/(?:CAD|SOK|MAH|NO|SOK|SK)/i);
-  const businessName = (businessParts[0] && businessParts[0].trim()) || 'İşletme Adı Yok';
+  // Business name detection
+  // PDF extract might contain headers, try to isolate the business name
+  // It's usually the first part of the line before common address indicators
+  const businessParts = cleanLine.split(/(?:MAHALLE|MAH\.|CAD|SOK|NO|SOK|SK)/i);
+  let businessName = (businessParts[0] && businessParts[0].trim()) || 'İşletme Adı Yok';
+  
+  // Clean up common PDF noise from business name
+  businessName = businessName.replace(/^\d+[\.\s-]/, '').trim(); 
 
   return {
     id: generateId(),
-    businessName,
+    businessName: businessName.length > 2 ? businessName : 'İşletme Adı Yok',
     fullAddress: cleanLine,
     district: detectedDistrict,
     neighborhood,
@@ -129,12 +136,13 @@ export function parseAddressLine(line: string): ParsedAddress | null {
 }
 
 /**
- * Removes duplicate address entries based on address string.
+ * Removes duplicate address entries based on normalized address string.
  */
 export function deduplicateAddresses(addresses: ParsedAddress[]): ParsedAddress[] {
   const seen = new Set<string>();
   return addresses.filter((addr) => {
-    const key = addr.fullAddress.toLowerCase().replace(/\s+/g, '');
+    // Normalize address for more accurate deduplication
+    const key = addr.fullAddress.toLowerCase().replace(/[^a-z0-9]/g, '');
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
