@@ -1,23 +1,20 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import { MapPin, Trash2, CheckCircle, Clock, ListChecks, Navigation2, SortAsc, LayoutGrid, Loader2, Route } from "lucide-react";
+import { Trash2, CheckCircle, ListChecks, Navigation2, SortAsc, LayoutGrid, Loader2, Route } from "lucide-react";
 import FileUploader from "@/components/FileUploader";
 import FilterBar from "@/components/FilterBar";
 import AddressCard from "@/components/AddressCard";
 import type { ParsedAddress } from "@/types/address";
 import { groupAddressesByNeighborhood } from "@/lib/parser";
-import { calculateDistance, getCoordinates } from "@/lib/location";
 import { Toaster } from "@/components/ui/toaster";
 import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
-type SortMode = "closest" | "furthest" | "alphabetical";
+type SortMode = "alphabetical";
 
 const STORAGE_KEY = "sahanav_data_v1";
 
@@ -25,10 +22,7 @@ export default function SahaNav() {
   const [addresses, setAddresses] = useState<ParsedAddress[]>([]);
   const [selectedDistrict, setSelectedDistrict] = useState("all");
   const [selectedNeighborhood, setSelectedNeighborhood] = useState("all");
-  const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
-  const [sortMode, setSortMode] = useState<SortMode>("closest");
-  const [isGeocoding, setIsGeocoding] = useState(false);
-  const [geocodingProgress, setGeocodingProgress] = useState(0);
+  const [sortMode, setSortMode] = useState<SortMode>("alphabetical");
   const [isInitialized, setIsInitialized] = useState(false);
   const [selectedRouteIds, setSelectedRouteIds] = useState<string[]>([]);
   const { toast } = useToast();
@@ -58,7 +52,6 @@ export default function SahaNav() {
     setSelectedDistrict("all");
     setSelectedNeighborhood("all");
     setSelectedRouteIds([]);
-    setGeocodingProgress(0);
   };
 
   const clearData = () => {
@@ -67,7 +60,6 @@ export default function SahaNav() {
       setSelectedDistrict("all");
       setSelectedNeighborhood("all");
       setSelectedRouteIds([]);
-      setGeocodingProgress(0);
       localStorage.removeItem(STORAGE_KEY);
       toast({ title: "Liste Temizlendi", description: "Tüm veriler cihazınızdan silindi." });
     }
@@ -129,77 +121,6 @@ export default function SahaNav() {
     window.open(url, "_blank");
   };
 
-  const handleGetLocation = () => {
-    if (!navigator.geolocation) {
-      toast({ variant: "destructive", title: "Hata", description: "Tarayıcı konum desteklemiyor." });
-      return;
-    }
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setUserLocation({ lat: position.coords.latitude, lng: position.coords.longitude });
-        toast({ title: "Konum Alındı", description: "Mesafe hesaplamaları güncelleniyor." });
-      },
-      () => toast({ variant: "destructive", title: "Hata", description: "Konum erişimi engellendi." })
-    );
-  };
-
-  // Background Geocoding
-  useEffect(() => {
-    if (addresses.length === 0) return;
-
-    let isMounted = true;
-
-    const processAddresses = async () => {
-      setIsGeocoding(true);
-      const batchSize = 10;
-      let processedCount = 0;
-
-      for (let i = 0; i < addresses.length; i += batchSize) {
-        if (!isMounted) break;
-        const batch = addresses.slice(i, i + batchSize);
-        const results = await Promise.all(batch.map(async (addr, index) => {
-          if (addr.lat !== undefined) return null;
-          const coords = await getCoordinates(addr.streetQuery, 1100 + (index * 50));
-          if (coords) {
-            return {
-              id: addr.id,
-              lat: coords.lat,
-              lng: coords.lng,
-              distance: userLocation ? calculateDistance(userLocation.lat, userLocation.lng, coords.lat, coords.lng) : undefined
-            };
-          }
-          return null;
-        }));
-
-        if (!isMounted) break;
-
-        const successfulResults = results.filter((r): r is NonNullable<typeof r> => r !== null);
-        if (successfulResults.length > 0) {
-          setAddresses(prev => prev.map(addr => {
-            const found = successfulResults.find(r => r.id === addr.id);
-            if (found) {
-              return { ...addr, lat: found.lat, lng: found.lng, distance: found.distance };
-            }
-            // Update distance even if lat/lng exists but location changed
-            if (userLocation && addr.lat && addr.lng) {
-              return { ...addr, distance: calculateDistance(userLocation.lat, userLocation.lng, addr.lat, addr.lng) };
-            }
-            return addr;
-          }));
-        }
-
-        processedCount += batch.length;
-        setGeocodingProgress(Math.round((processedCount / addresses.length) * 100));
-      }
-
-      if (isMounted) setIsGeocoding(false);
-    };
-
-    processAddresses();
-    return () => { isMounted = false; };
-  }, [userLocation, addresses.length]);
-
   const districts = useMemo(() => Array.from(new Set(addresses.map(a => a.district))).sort(), [addresses]);
 
   const neighborhoodsForFilter = useMemo(() => {
@@ -214,12 +135,9 @@ export default function SahaNav() {
       return dMatch && nMatch;
     });
 
-    result.sort((a, b) => {
-      if (sortMode === "alphabetical") return a.businessName.localeCompare(b.businessName, 'tr');
-      const distA = a.distance === undefined ? Infinity : a.distance;
-      const distB = b.distance === undefined ? Infinity : b.distance;
-      return sortMode === "closest" ? distA - distB : distB - distA;
-    });
+    if (sortMode === "alphabetical") {
+      result.sort((a, b) => a.businessName.localeCompare(b.businessName, 'tr'));
+    }
 
     return result;
   }, [addresses, selectedDistrict, selectedNeighborhood, sortMode]);
@@ -229,8 +147,6 @@ export default function SahaNav() {
   const stats = useMemo(() => ({
     total: filteredAndSortedAddresses.length,
     visited: filteredAndSortedAddresses.filter(a => a.visited).length,
-    geocoded: filteredAndSortedAddresses.filter(a => a.lat !== undefined).length,
-    closest: Math.min(...filteredAndSortedAddresses.map(a => a.distance || Infinity).filter(d => d !== Infinity), 0)
   }), [filteredAndSortedAddresses]);
 
   if (!isInitialized) {
@@ -250,12 +166,6 @@ export default function SahaNav() {
             <p className="text-sm font-medium text-muted-foreground">Saha Operasyon Yönetimi</p>
           </div>
           <div className="flex items-center gap-3">
-            {isGeocoding && (
-              <div className="flex flex-col items-end gap-1">
-                <span className="text-[10px] font-bold text-primary animate-pulse">%{geocodingProgress}</span>
-                <Progress value={geocodingProgress} className="h-1.5 w-24 bg-primary/10" />
-              </div>
-            )}
             {addresses.length > 0 && (
               <Button variant="ghost" size="sm" onClick={clearData} className="text-destructive font-bold h-8 px-2">
                 Sıfırla
@@ -271,12 +181,10 @@ export default function SahaNav() {
         ) : (
           <div className="space-y-8">
             {/* Stats Panel */}
-            <section className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <section className="grid grid-cols-2 gap-4">
               {[
-                { label: "TOPLAM", value: stats.total, color: "bg-blue-500", icon: ListChecks },
-                { label: "GİDİLEN", value: stats.visited, color: "bg-green-500", icon: CheckCircle },
-                { label: "ÖLÇÜLEN", value: stats.geocoded, color: "bg-purple-500", icon: MapPin },
-                { label: "EN YAKIN", value: (stats.closest > 0 && stats.closest !== Infinity) ? `${stats.closest.toFixed(1)} km` : '-', color: "bg-orange-500", icon: Navigation2 },
+                { label: "TOPLAM ADRES", value: stats.total, color: "bg-blue-500", icon: ListChecks },
+                { label: "GİDİLEN ADRES", value: stats.visited, color: "bg-green-500", icon: CheckCircle },
               ].map((stat, i) => (
                 <div key={i} className="ios-card p-5 flex flex-col items-center text-center gap-1">
                   <div className={cn("p-2 rounded-full text-white mb-1", stat.color)}>
@@ -309,16 +217,10 @@ export default function SahaNav() {
                       <div className="flex items-center gap-2"><SortAsc className="w-4 h-4 text-primary" /><SelectValue /></div>
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="closest">En Yakın</SelectItem>
-                      <SelectItem value="furthest">En Uzak</SelectItem>
                       <SelectItem value="alphabetical">Alfabetik</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                <Button onClick={handleGetLocation} className="w-full h-12 rounded-xl font-bold bg-primary shadow-none active:scale-[0.98] transition-transform">
-                  <Navigation2 className="w-4 h-4 mr-2" />
-                  Konumumu Kullan
-                </Button>
               </div>
             </section>
 

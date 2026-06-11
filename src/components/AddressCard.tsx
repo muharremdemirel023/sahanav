@@ -1,8 +1,7 @@
-
 "use client";
 
 import React from "react";
-import { MapPin, Navigation, CheckCircle2, Ruler, ChevronRight, PlusCircle, CheckCircle, Trash2 } from "lucide-react";
+import { MapPin, Navigation, CheckCircle2, ChevronRight, PlusCircle, CheckCircle, Trash2 } from "lucide-react";
 import type { ParsedAddress } from "@/types/address";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
@@ -102,13 +101,6 @@ export default function AddressCard({
             </p>
           </div>
         </div>
-
-        {address.distance !== undefined && (
-          <div className="flex items-center gap-2 text-xs font-bold text-primary bg-primary/5 p-2 px-3 rounded-full w-fit">
-            <Ruler className="w-3.5 h-3.5" />
-            <span>Mesafe: {address.distance.toFixed(2)} km</span>
-          </div>
-        )}
       </div>
 
       <div className="flex gap-2">

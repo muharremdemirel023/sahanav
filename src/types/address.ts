@@ -8,5 +8,4 @@ export interface ParsedAddress {
   visited: boolean;
   lat?: number;
   lng?: number;
-  distance?: number;
 }
