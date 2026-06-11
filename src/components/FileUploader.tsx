@@ -3,7 +3,7 @@
 
 import React, { useState, useRef } from "react";
 import { Upload, FileWarning, Loader2, FilePlus, ArrowRight, Download, Trash2, Edit2, Check, X } from "lucide-react";
-import { parseAddressLine, deduplicateAddresses } from "@/lib/parser";
+import { parseTxtContent, deduplicateAddresses, parseAddressLine } from "@/lib/parser";
 import type { ParsedAddress } from "@/types/address";
 import { useToast } from "@/hooks/use-toast";
 import { Card } from "./ui/card";
@@ -115,23 +115,19 @@ export default function FileUploader({ onDataLoaded }: FileUploaderProps) {
   const processFile = async (file: File) => {
     if (!file) return;
     setLoading(true);
-    console.log("--- DOSYA İŞLEME BAŞLADI ---");
-    console.log("Dosya adı:", file.name);
+    console.log("--- YENİ DOSYA İŞLEME ---");
+    console.log("Dosya Adı:", file.name);
     console.log("Mod:", mode);
 
     try {
       if (mode === "txt") {
         const content = await file.text();
-        const lines = content.split(/\r?\n/).filter(l => l.trim().length > 10);
-        console.log("Okunan ham satır sayısı:", lines.length);
         
-        const parsedResults = lines
-          .map(l => parseAddressLine(l.trim()))
-          .filter((l): l is ParsedAddress => !!l);
-        
+        // Blok bazlı ayrıştırmayı başlat
+        const parsedResults = parseTxtContent(content);
         const results = deduplicateAddresses(parsedResults);
-        console.log("Ayrıştırılan ve tekilleştirilen kayıt sayısı:", results.length);
         
+        console.log("Sonuç Kayıt Sayısı (Tekilleştirme sonrası):", results.length);
         onDataLoaded(results);
       } else {
         if (!plate.trim()) { 
@@ -140,14 +136,12 @@ export default function FileUploader({ onDataLoaded }: FileUploaderProps) {
           return; 
         }
         const lines = await extractTextFromPdf(file);
-        console.log("PDF'den ayıklanan satır sayısı:", lines.length);
         setPreviewLines(lines.map(l => ({ id: Math.random().toString(36).substr(2, 9), text: l })));
       }
     } catch (err: any) {
       toast({ variant: "destructive", title: "Hata", description: err.message });
     } finally {
       setLoading(false);
-      // Dosya girişini temizle ki aynı dosya tekrar seçildiğinde onChange tetiklensin
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
