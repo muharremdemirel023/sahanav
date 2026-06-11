@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -28,7 +29,9 @@ export default function SahaNav() {
     const savedData = localStorage.getItem(STORAGE_KEY);
     if (savedData) {
       try {
-        setAddresses(JSON.parse(savedData));
+        const parsed = JSON.parse(savedData);
+        setAddresses(parsed);
+        console.log("Cihaz hafızasından yüklenen kayıt sayısı:", parsed.length);
       } catch (e) {
         console.error("Kayıtlı veriler okunamadı", e);
       }
@@ -44,10 +47,25 @@ export default function SahaNav() {
   }, [addresses, isInitialized]);
 
   const handleDataLoaded = (data: ParsedAddress[]) => {
-    setAddresses(data);
+    console.log("--- YENİ VERİ YÜKLENİYOR ---");
+    console.log("Gelen kayıt sayısı:", data.length);
+    console.log("İlk 5 örnek:", data.slice(0, 5));
+
+    // 1. Önce cihaz hafızasını temizle
+    localStorage.removeItem(STORAGE_KEY);
+    
+    // 2. Tüm filtre ve seçim durumlarını sıfırla
     setSelectedDistrict("all");
     setSelectedNeighborhood("all");
     setSelectedRouteIds([]);
+    
+    // 3. Yeni veriyi set et
+    setAddresses(data);
+    
+    toast({ 
+      title: "Liste Güncellendi", 
+      description: `${data.length} yeni adres başarıyla yüklendi.` 
+    });
   };
 
   const clearData = () => {
@@ -57,9 +75,9 @@ export default function SahaNav() {
       setSelectedNeighborhood("all");
       setSelectedRouteIds([]);
       localStorage.removeItem(STORAGE_KEY);
-      // Clear geocode cache as well if user wants full reset
       localStorage.removeItem('sahanav_geocode_cache_v4');
       toast({ title: "Kayıtlar Temizlendi", description: "Cihazdaki tüm veriler silindi." });
+      console.log("Kullanıcı isteğiyle tüm veriler temizlendi.");
     }
   };
 

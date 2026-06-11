@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useRef } from "react";
@@ -105,7 +106,7 @@ export default function FileUploader({ onDataLoaded }: FileUploaderProps) {
       if (extractedLines.length === 0) throw new Error("PDF metni çıkarılamadı. Bu PDF taranmış görsel olabilir.");
       return extractedLines;
     } catch (err: any) {
-      console.error(err);
+      console.error("PDF okuma hatası:", err);
       toast({ variant: "destructive", title: "PDF okuyucu başlatılamadı.", description: err.message });
       throw err;
     }
@@ -114,20 +115,40 @@ export default function FileUploader({ onDataLoaded }: FileUploaderProps) {
   const processFile = async (file: File) => {
     if (!file) return;
     setLoading(true);
+    console.log("--- DOSYA İŞLEME BAŞLADI ---");
+    console.log("Dosya adı:", file.name);
+    console.log("Mod:", mode);
+
     try {
       if (mode === "txt") {
         const content = await file.text();
-        const results = deduplicateAddresses(content.split(/\r?\n/).map(l => parseAddressLine(l.trim())).filter((l): l is ParsedAddress => !!l));
+        const lines = content.split(/\r?\n/).filter(l => l.trim().length > 10);
+        console.log("Okunan ham satır sayısı:", lines.length);
+        
+        const parsedResults = lines
+          .map(l => parseAddressLine(l.trim()))
+          .filter((l): l is ParsedAddress => !!l);
+        
+        const results = deduplicateAddresses(parsedResults);
+        console.log("Ayrıştırılan ve tekilleştirilen kayıt sayısı:", results.length);
+        
         onDataLoaded(results);
       } else {
-        if (!plate.trim()) { toast({ variant: "destructive", title: "Plaka Gerekli" }); setLoading(false); return; }
+        if (!plate.trim()) { 
+          toast({ variant: "destructive", title: "Plaka Gerekli" }); 
+          setLoading(false); 
+          return; 
+        }
         const lines = await extractTextFromPdf(file);
+        console.log("PDF'den ayıklanan satır sayısı:", lines.length);
         setPreviewLines(lines.map(l => ({ id: Math.random().toString(36).substr(2, 9), text: l })));
       }
     } catch (err: any) {
       toast({ variant: "destructive", title: "Hata", description: err.message });
     } finally {
       setLoading(false);
+      // Dosya girişini temizle ki aynı dosya tekrar seçildiğinde onChange tetiklensin
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
@@ -149,6 +170,7 @@ export default function FileUploader({ onDataLoaded }: FileUploaderProps) {
                 <div className="flex-1 flex gap-2">
                   <Input value={editValue} onChange={(e) => setEditValue(e.target.value)} className="h-9 bg-white" />
                   <Button size="icon" variant="ghost" onClick={() => { setPreviewLines(p => p.map(l => l.id === editingId ? { ...l, text: editValue } : l)); setEditingId(null); }} className="text-green-600"><Check className="w-4 h-4" /></Button>
+                  <Button size="icon" variant="ghost" onClick={() => setEditingId(null)} className="text-destructive"><X className="w-4 h-4" /></Button>
                 </div>
               ) : (
                 <>
