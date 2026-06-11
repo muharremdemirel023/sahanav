@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -11,11 +10,10 @@ import { groupAddressesByNeighborhood } from "@/lib/parser";
 import { Toaster } from "@/components/ui/toaster";
 import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
-const STORAGE_KEY = "sahanav_data_v1";
+const STORAGE_KEY = "sahanav_data_v2";
 
 export default function SahaNav() {
   const [addresses, setAddresses] = useState<ParsedAddress[]>([]);
@@ -53,20 +51,22 @@ export default function SahaNav() {
   };
 
   const clearData = () => {
-    if (window.confirm("Tüm listeyi temizlemek istediğinize emin misiniz?")) {
+    if (window.confirm("Tüm listeyi ve cihazdaki kayıtları temizlemek istediğinize emin misiniz?")) {
       setAddresses([]);
       setSelectedDistrict("all");
       setSelectedNeighborhood("all");
       setSelectedRouteIds([]);
       localStorage.removeItem(STORAGE_KEY);
-      toast({ title: "Liste Temizlendi", description: "Tüm veriler cihazınızdan silindi." });
+      // Clear geocode cache as well if user wants full reset
+      localStorage.removeItem('sahanav_geocode_cache_v4');
+      toast({ title: "Kayıtlar Temizlendi", description: "Cihazdaki tüm veriler silindi." });
     }
   };
 
   const deleteAddress = (id: string) => {
     setAddresses(prev => prev.filter(addr => addr.id !== id));
     setSelectedRouteIds(prev => prev.filter(i => i !== id));
-    toast({ title: "Adres Silindi", description: "Adres listeden kaldırıldı." });
+    toast({ title: "Adres Silindi", description: "Adres cihazdan kaldırıldı." });
   };
 
   const toggleVisited = (id: string) => {

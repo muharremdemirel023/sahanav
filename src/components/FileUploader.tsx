@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useRef } from "react";
@@ -103,10 +102,11 @@ export default function FileUploader({ onDataLoaded }: FileUploaderProps) {
         });
       }
 
-      if (extractedLines.length === 0) throw new Error("PDF metni çıkarılamadı.");
+      if (extractedLines.length === 0) throw new Error("PDF metni çıkarılamadı. Bu PDF taranmış görsel olabilir.");
       return extractedLines;
     } catch (err: any) {
       console.error(err);
+      toast({ variant: "destructive", title: "PDF okuyucu başlatılamadı.", description: err.message });
       throw err;
     }
   };
