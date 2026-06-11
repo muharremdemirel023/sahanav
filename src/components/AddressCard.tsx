@@ -2,7 +2,7 @@
 "use client";
 
 import React from "react";
-import { MapPin, Navigation, CheckCircle2, Ruler, ChevronRight, PlusCircle, CheckCircle } from "lucide-react";
+import { MapPin, Navigation, CheckCircle2, Ruler, ChevronRight, PlusCircle, CheckCircle, Trash2 } from "lucide-react";
 import type { ParsedAddress } from "@/types/address";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 interface AddressCardProps {
   address: ParsedAddress;
   onToggleVisited: (id: string) => void;
+  onDelete?: () => void;
   isSelected?: boolean;
   onToggleSelection?: () => void;
   selectionOrder?: number;
@@ -21,6 +22,7 @@ interface AddressCardProps {
 export default function AddressCard({ 
   address, 
   onToggleVisited, 
+  onDelete,
   isSelected, 
   onToggleSelection,
   selectionOrder 
@@ -109,16 +111,27 @@ export default function AddressCard({
         )}
       </div>
 
-      <Button
-        onClick={openInMaps}
-        className="w-full h-11 rounded-xl font-bold flex items-center justify-between px-4 transition-all bg-white text-primary border border-primary/20 hover:bg-primary/5 active:scale-95 shadow-none"
-      >
-        <span className="flex items-center gap-2">
-          <Navigation className="w-4 h-4" />
-          Haritada Aç
-        </span>
-        <ChevronRight className="w-4 h-4 opacity-50" />
-      </Button>
+      <div className="flex gap-2">
+        <Button
+          onClick={openInMaps}
+          className="flex-1 h-11 rounded-xl font-bold flex items-center justify-between px-4 transition-all bg-white text-primary border border-primary/20 hover:bg-primary/5 active:scale-95 shadow-none"
+        >
+          <span className="flex items-center gap-2">
+            <Navigation className="w-4 h-4" />
+            Haritada Aç
+          </span>
+          <ChevronRight className="w-4 h-4 opacity-50" />
+        </Button>
+        {onDelete && (
+          <Button
+            variant="ghost"
+            onClick={onDelete}
+            className="h-11 w-11 rounded-xl text-destructive hover:bg-destructive/5 hover:text-destructive shrink-0"
+          >
+            <Trash2 className="w-5 h-5" />
+          </Button>
+        )}
+      </div>
     </Card>
   );
 }

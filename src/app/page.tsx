@@ -69,16 +69,23 @@ export default function SahaNav() {
       setSelectedRouteIds([]);
       setGeocodingProgress(0);
       localStorage.removeItem(STORAGE_KEY);
+      toast({ title: "Liste Temizlendi", description: "Tüm veriler cihazınızdan silindi." });
+    }
+  };
+
+  const deleteAddress = (id: string) => {
+    if (window.confirm("Bu adresi listeden silmek istediğinize emin misiniz?")) {
+      setAddresses(prev => prev.filter(addr => addr.id !== id));
+      setSelectedRouteIds(prev => prev.filter(i => i !== id));
+      toast({ title: "Adres Silindi", description: "Adres listeden ve hafızadan kaldırıldı." });
     }
   };
 
   const toggleVisited = (id: string) => {
     setAddresses(prev => {
-      const newAddresses = prev.map(addr => 
+      return prev.map(addr => 
         addr.id === id ? { ...addr, visited: !addr.visited } : addr
       );
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(newAddresses));
-      return newAddresses;
     });
   };
 
@@ -148,15 +155,6 @@ export default function SahaNav() {
       const batchSize = 10;
       let processedCount = 0;
 
-      // Update existing
-      setAddresses(prev => prev.map(addr => {
-        if (userLocation && addr.lat && addr.lng) {
-          const dist = calculateDistance(userLocation.lat, userLocation.lng, addr.lat, addr.lng);
-          return { ...addr, distance: dist };
-        }
-        return addr;
-      }));
-
       for (let i = 0; i < addresses.length; i += batchSize) {
         if (!isMounted) break;
         const batch = addresses.slice(i, i + batchSize);
@@ -182,6 +180,10 @@ export default function SahaNav() {
             const found = successfulResults.find(r => r.id === addr.id);
             if (found) {
               return { ...addr, lat: found.lat, lng: found.lng, distance: found.distance };
+            }
+            // Update distance even if lat/lng exists but location changed
+            if (userLocation && addr.lat && addr.lng) {
+              return { ...addr, distance: calculateDistance(userLocation.lat, userLocation.lng, addr.lat, addr.lng) };
             }
             return addr;
           }));
@@ -344,6 +346,7 @@ export default function SahaNav() {
                             key={addr.id} 
                             address={addr} 
                             onToggleVisited={toggleVisited}
+                            onDelete={() => deleteAddress(addr.id)}
                             isSelected={selectedRouteIds.includes(addr.id)}
                             onToggleSelection={() => toggleRouteSelection(addr.id)}
                             selectionOrder={selectedRouteIds.indexOf(addr.id) + 1}
