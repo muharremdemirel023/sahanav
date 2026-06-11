@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
@@ -14,15 +15,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
-type SortMode = "alphabetical";
-
 const STORAGE_KEY = "sahanav_data_v1";
 
 export default function SahaNav() {
   const [addresses, setAddresses] = useState<ParsedAddress[]>([]);
   const [selectedDistrict, setSelectedDistrict] = useState("all");
   const [selectedNeighborhood, setSelectedNeighborhood] = useState("all");
-  const [sortMode, setSortMode] = useState<SortMode>("alphabetical");
   const [isInitialized, setIsInitialized] = useState(false);
   const [selectedRouteIds, setSelectedRouteIds] = useState<string[]>([]);
   const { toast } = useToast();
@@ -66,19 +64,15 @@ export default function SahaNav() {
   };
 
   const deleteAddress = (id: string) => {
-    if (window.confirm("Bu adresi listeden silmek istediğinize emin misiniz?")) {
-      setAddresses(prev => prev.filter(addr => addr.id !== id));
-      setSelectedRouteIds(prev => prev.filter(i => i !== id));
-      toast({ title: "Adres Silindi", description: "Adres listeden ve hafızadan kaldırıldı." });
-    }
+    setAddresses(prev => prev.filter(addr => addr.id !== id));
+    setSelectedRouteIds(prev => prev.filter(i => i !== id));
+    toast({ title: "Adres Silindi", description: "Adres listeden kaldırıldı." });
   };
 
   const toggleVisited = (id: string) => {
-    setAddresses(prev => {
-      return prev.map(addr => 
-        addr.id === id ? { ...addr, visited: !addr.visited } : addr
-      );
-    });
+    setAddresses(prev => prev.map(addr => 
+      addr.id === id ? { ...addr, visited: !addr.visited } : addr
+    ));
   };
 
   const toggleRouteSelection = (id: string) => {
@@ -128,26 +122,20 @@ export default function SahaNav() {
     return Array.from(new Set(filteredByDistrict.map(a => a.neighborhood))).sort();
   }, [addresses, selectedDistrict]);
 
-  const filteredAndSortedAddresses = useMemo(() => {
-    let result = addresses.filter(a => {
+  const filteredAddresses = useMemo(() => {
+    return addresses.filter(a => {
       const dMatch = selectedDistrict === "all" || a.district === selectedDistrict;
       const nMatch = selectedNeighborhood === "all" || a.neighborhood === selectedNeighborhood;
       return dMatch && nMatch;
-    });
+    }).sort((a, b) => a.businessName.localeCompare(b.businessName, 'tr'));
+  }, [addresses, selectedDistrict, selectedNeighborhood]);
 
-    if (sortMode === "alphabetical") {
-      result.sort((a, b) => a.businessName.localeCompare(b.businessName, 'tr'));
-    }
-
-    return result;
-  }, [addresses, selectedDistrict, selectedNeighborhood, sortMode]);
-
-  const groupedAddresses = useMemo(() => groupAddressesByNeighborhood(filteredAndSortedAddresses), [filteredAndSortedAddresses]);
+  const groupedAddresses = useMemo(() => groupAddressesByNeighborhood(filteredAddresses), [filteredAddresses]);
 
   const stats = useMemo(() => ({
-    total: filteredAndSortedAddresses.length,
-    visited: filteredAndSortedAddresses.filter(a => a.visited).length,
-  }), [filteredAndSortedAddresses]);
+    total: filteredAddresses.length,
+    visited: filteredAddresses.filter(a => a.visited).length,
+  }), [filteredAddresses]);
 
   if (!isInitialized) {
     return (
@@ -158,20 +146,18 @@ export default function SahaNav() {
   }
 
   return (
-    <main className="min-h-screen bg-[#F2F2F7] pb-32">
+    <main className="min-h-screen bg-[#F2F2F7] pb-40">
       <header className="sticky top-0 z-50 ios-glass border-b pt-12 pb-6 px-6">
         <div className="max-w-4xl mx-auto flex justify-between items-end">
           <div>
             <h1 className="text-3xl font-bold tracking-tight text-foreground">SahaNav</h1>
             <p className="text-sm font-medium text-muted-foreground">Saha Operasyon Yönetimi</p>
           </div>
-          <div className="flex items-center gap-3">
-            {addresses.length > 0 && (
-              <Button variant="ghost" size="sm" onClick={clearData} className="text-destructive font-bold h-8 px-2">
-                Sıfırla
-              </Button>
-            )}
-          </div>
+          {addresses.length > 0 && (
+            <Button variant="ghost" size="sm" onClick={clearData} className="text-destructive font-bold h-8 px-2">
+              Sıfırla
+            </Button>
+          )}
         </div>
       </header>
 
@@ -180,57 +166,39 @@ export default function SahaNav() {
           <FileUploader onDataLoaded={handleDataLoaded} />
         ) : (
           <div className="space-y-8">
-            {/* Stats Panel */}
             <section className="grid grid-cols-2 gap-4">
-              {[
-                { label: "TOPLAM ADRES", value: stats.total, color: "bg-blue-500", icon: ListChecks },
-                { label: "GİDİLEN ADRES", value: stats.visited, color: "bg-green-500", icon: CheckCircle },
-              ].map((stat, i) => (
-                <div key={i} className="ios-card p-5 flex flex-col items-center text-center gap-1">
-                  <div className={cn("p-2 rounded-full text-white mb-1", stat.color)}>
-                    <stat.icon className="w-4 h-4" />
-                  </div>
-                  <span className="text-xl font-black">{stat.value}</span>
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{stat.label}</span>
+              <div className="ios-card p-5 flex flex-col items-center text-center gap-1">
+                <div className="p-2 rounded-full text-white mb-1 bg-blue-500">
+                  <ListChecks className="w-4 h-4" />
                 </div>
-              ))}
-            </section>
-
-            {/* Filter & Sort Section */}
-            <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="md:col-span-2">
-                <FilterBar
-                  districts={districts}
-                  neighborhoods={neighborhoodsForFilter}
-                  selectedDistrict={selectedDistrict}
-                  selectedNeighborhood={selectedNeighborhood}
-                  onDistrictChange={(v) => { setSelectedDistrict(v); setSelectedNeighborhood("all"); }}
-                  onNeighborhoodChange={setSelectedNeighborhood}
-                  onClear={() => { setSelectedDistrict("all"); setSelectedNeighborhood("all"); }}
-                />
+                <span className="text-xl font-black">{stats.total}</span>
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">TOPLAM ADRES</span>
               </div>
-              <div className="ios-card p-6 flex flex-col gap-4">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest ml-1">SIRALAMA</label>
-                  <Select value={sortMode} onValueChange={(v) => setSortMode(v as SortMode)}>
-                    <SelectTrigger className="bg-[#F2F2F7] border-none h-12 rounded-xl focus:ring-0">
-                      <div className="flex items-center gap-2"><SortAsc className="w-4 h-4 text-primary" /><SelectValue /></div>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="alphabetical">Alfabetik</SelectItem>
-                    </SelectContent>
-                  </Select>
+              <div className="ios-card p-5 flex flex-col items-center text-center gap-1">
+                <div className="p-2 rounded-full text-white mb-1 bg-green-500">
+                  <CheckCircle className="w-4 h-4" />
                 </div>
+                <span className="text-xl font-black">{stats.visited}</span>
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">GİDİLEN ADRES</span>
               </div>
             </section>
 
-            {/* Neighborhood Groups */}
+            <FilterBar
+              districts={districts}
+              neighborhoods={neighborhoodsForFilter}
+              selectedDistrict={selectedDistrict}
+              selectedNeighborhood={selectedNeighborhood}
+              onDistrictChange={(v) => { setSelectedDistrict(v); setSelectedNeighborhood("all"); }}
+              onNeighborhoodChange={setSelectedNeighborhood}
+              onClear={() => { setSelectedDistrict("all"); setSelectedNeighborhood("all"); }}
+            />
+
             <Accordion type="multiple" className="space-y-4">
               {Object.entries(groupedAddresses).map(([neighborhood, list]) => {
                 const isDone = list.every(a => a.visited) && list.length > 0;
                 return (
                   <AccordionItem key={neighborhood} value={neighborhood} className={cn("ios-card px-4 border-none transition-all", isDone && "opacity-60")}>
-                    <AccordionTrigger className="hover:no-underline py-5 [&[data-state=open]>svg]:rotate-180">
+                    <AccordionTrigger className="hover:no-underline py-5">
                       <div className="flex items-center gap-4 text-left">
                         <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center", isDone ? "bg-green-500/10 text-green-600" : "bg-primary/10 text-primary")}>
                           <LayoutGrid className="w-5 h-5" />
@@ -264,7 +232,6 @@ export default function SahaNav() {
         )}
       </div>
 
-      {/* Fixed Route Button */}
       {selectedRouteIds.length > 0 && (
         <div className="fixed bottom-0 left-0 right-0 p-6 z-[60] bg-gradient-to-t from-background via-background/90 to-transparent">
           <div className="max-w-4xl mx-auto">
@@ -285,14 +252,7 @@ export default function SahaNav() {
               </div>
             </Button>
             {selectedRouteIds.length > 9 && (
-              <p className="text-center text-xs font-bold text-destructive mt-2 uppercase tracking-widest">
-                En fazla 9 durak seçebilirsiniz
-              </p>
-            )}
-            {selectedRouteIds.length === 1 && (
-              <p className="text-center text-xs font-bold text-muted-foreground mt-2 uppercase tracking-widest">
-                Rota oluşturmak için en az 2 adres seçin
-              </p>
+              <p className="text-center text-xs font-bold text-destructive mt-2 uppercase tracking-widest">En fazla 9 durak seçebilirsiniz</p>
             )}
           </div>
         </div>

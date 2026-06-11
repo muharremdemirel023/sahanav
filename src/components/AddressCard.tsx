@@ -1,3 +1,4 @@
+
 "use client";
 
 import React from "react";
@@ -40,7 +41,6 @@ export default function AddressCard({
         isSelected && "ring-2 ring-primary bg-primary/[0.02]"
       )}
     >
-      {/* Selection Badge */}
       <div 
         onClick={onToggleSelection}
         className={cn(
@@ -106,7 +106,7 @@ export default function AddressCard({
       <div className="flex gap-2">
         <Button
           onClick={openInMaps}
-          className="flex-1 h-11 rounded-xl font-bold flex items-center justify-between px-4 transition-all bg-white text-primary border border-primary/20 hover:bg-primary/5 active:scale-95 shadow-none"
+          className="flex-1 h-11 rounded-xl font-bold flex items-center justify-between px-4 bg-white text-primary border border-primary/20 hover:bg-primary/5 active:scale-95"
         >
           <span className="flex items-center gap-2">
             <Navigation className="w-4 h-4" />
@@ -118,7 +118,7 @@ export default function AddressCard({
           <Button
             variant="ghost"
             onClick={onDelete}
-            className="h-11 w-11 rounded-xl text-destructive hover:bg-destructive/5 hover:text-destructive shrink-0"
+            className="h-11 w-11 rounded-xl text-destructive hover:bg-destructive/5 shrink-0"
           >
             <Trash2 className="w-5 h-5" />
           </Button>
