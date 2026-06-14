@@ -1,8 +1,7 @@
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import { Trash2, CheckCircle, ListChecks, Navigation2, SortAsc, LayoutGrid, Loader2, Route } from "lucide-react";
+import { Trash2, CheckCircle, ListChecks, LayoutGrid, Loader2, Route, Filter, ChevronDown, MapPin } from "lucide-react";
 import FileUploader from "@/components/FileUploader";
 import FilterBar from "@/components/FilterBar";
 import AddressCard from "@/components/AddressCard";
@@ -24,14 +23,12 @@ export default function SahaNav() {
   const [selectedRouteIds, setSelectedRouteIds] = useState<string[]>([]);
   const { toast } = useToast();
 
-  // Load data from localStorage on mount
   useEffect(() => {
     const savedData = localStorage.getItem(STORAGE_KEY);
     if (savedData) {
       try {
         const parsed = JSON.parse(savedData);
         setAddresses(parsed);
-        console.log("Cihaz hafızasından yüklenen kayıt sayısı:", parsed.length);
       } catch (e) {
         console.error("Kayıtlı veriler okunamadı", e);
       }
@@ -39,7 +36,6 @@ export default function SahaNav() {
     setIsInitialized(true);
   }, []);
 
-  // Save data to localStorage whenever addresses change
   useEffect(() => {
     if (isInitialized) {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(addresses));
@@ -47,44 +43,31 @@ export default function SahaNav() {
   }, [addresses, isInitialized]);
 
   const handleDataLoaded = (data: ParsedAddress[]) => {
-    console.log("--- YENİ VERİ YÜKLENİYOR ---");
-    console.log("Gelen kayıt sayısı:", data.length);
-    console.log("İlk 5 örnek:", data.slice(0, 5));
-
-    // 1. Önce cihaz hafızasını temizle
     localStorage.removeItem(STORAGE_KEY);
-    
-    // 2. Tüm filtre ve seçim durumlarını sıfırla
     setSelectedDistrict("all");
     setSelectedNeighborhood("all");
     setSelectedRouteIds([]);
-    
-    // 3. Yeni veriyi set et
     setAddresses(data);
-    
     toast({ 
-      title: "Liste Güncellendi", 
-      description: `${data.length} yeni adres başarıyla yüklendi.` 
+      title: "Veri Yüklendi", 
+      description: `${data.length} adet adres başarıyla listelendi.` 
     });
   };
 
   const clearData = () => {
-    if (window.confirm("Tüm listeyi ve cihazdaki kayıtları temizlemek istediğinize emin misiniz?")) {
+    if (window.confirm("Tüm listeyi temizlemek istediğinize emin misiniz?")) {
       setAddresses([]);
       setSelectedDistrict("all");
       setSelectedNeighborhood("all");
       setSelectedRouteIds([]);
       localStorage.removeItem(STORAGE_KEY);
-      localStorage.removeItem('sahanav_geocode_cache_v4');
-      toast({ title: "Kayıtlar Temizlendi", description: "Cihazdaki tüm veriler silindi." });
-      console.log("Kullanıcı isteğiyle tüm veriler temizlendi.");
+      toast({ title: "Sıfırlandı", description: "Cihazdaki tüm veriler silindi." });
     }
   };
 
   const deleteAddress = (id: string) => {
     setAddresses(prev => prev.filter(addr => addr.id !== id));
     setSelectedRouteIds(prev => prev.filter(i => i !== id));
-    toast({ title: "Adres Silindi", description: "Adres cihazdan kaldırıldı." });
   };
 
   const toggleVisited = (id: string) => {
@@ -95,9 +78,7 @@ export default function SahaNav() {
 
   const toggleRouteSelection = (id: string) => {
     setSelectedRouteIds(prev => {
-      if (prev.includes(id)) {
-        return prev.filter(i => i !== id);
-      }
+      if (prev.includes(id)) return prev.filter(i => i !== id);
       return [...prev, id];
     });
   };
@@ -108,7 +89,7 @@ export default function SahaNav() {
       toast({ 
         variant: "destructive", 
         title: "Limit Aşıldı", 
-        description: "Google Maps rotası en fazla 9 durak destekler." 
+        description: "Google Maps en fazla 9 durak destekler." 
       });
       return;
     }
@@ -119,17 +100,12 @@ export default function SahaNav() {
 
     const origin = encodeURIComponent(selectedAddresses[0].streetQuery);
     const destination = encodeURIComponent(selectedAddresses[selectedAddresses.length - 1].streetQuery);
-    
     let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=driving`;
 
     if (selectedAddresses.length > 2) {
-      const waypoints = selectedAddresses
-        .slice(1, -1)
-        .map(a => encodeURIComponent(a.streetQuery))
-        .join('|');
+      const waypoints = selectedAddresses.slice(1, -1).map(a => encodeURIComponent(a.streetQuery)).join('|');
       url += `&waypoints=${waypoints}`;
     }
-
     window.open(url, "_blank");
   };
 
@@ -157,50 +133,73 @@ export default function SahaNav() {
 
   if (!isInitialized) {
     return (
-      <div className="min-h-screen bg-[#F2F2F7] flex items-center justify-center">
-        <Loader2 className="w-10 h-10 text-primary animate-spin" />
+      <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
       </div>
     );
   }
 
   return (
-    <main className="min-h-screen bg-[#F2F2F7] pb-40">
-      <header className="sticky top-0 z-50 ios-glass border-b pt-12 pb-6 px-6">
-        <div className="max-w-4xl mx-auto flex justify-between items-end">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">SahaNav</h1>
-            <p className="text-sm font-medium text-muted-foreground">Saha Operasyon Yönetimi</p>
+    <main className="min-h-screen bg-[#F8FAFC] text-[#1E293B] selection:bg-primary/10">
+      <header className="glass-header px-6 py-5">
+        <div className="max-w-5xl mx-auto flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-lg shadow-primary/20">
+              <Route className="text-white w-5 h-5" />
+            </div>
+            <div>
+              <h1 className="text-xl font-black tracking-tight text-slate-900 leading-none">SahaNav</h1>
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Premium Ops</span>
+            </div>
           </div>
           {addresses.length > 0 && (
-            <Button variant="ghost" size="sm" onClick={clearData} className="text-destructive font-bold h-8 px-2">
-              Sıfırla
+            <Button variant="ghost" size="sm" onClick={clearData} className="text-slate-400 hover:text-destructive hover:bg-destructive/5 font-bold transition-all">
+              Tümünü Temizle
             </Button>
           )}
         </div>
       </header>
 
-      <div className="max-w-4xl mx-auto px-6 py-8 space-y-8">
+      <div className="max-w-5xl mx-auto px-6 py-8 space-y-10">
         {addresses.length === 0 ? (
-          <FileUploader onDataLoaded={handleDataLoaded} />
+          <div className="py-12">
+            <FileUploader onDataLoaded={handleDataLoaded} />
+          </div>
         ) : (
-          <div className="space-y-8">
-            <section className="grid grid-cols-2 gap-4">
-              <div className="ios-card p-5 flex flex-col items-center text-center gap-1">
-                <div className="p-2 rounded-full text-white mb-1 bg-blue-500">
+          <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
+            {/* Stats Section */}
+            <section className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="premium-card p-5 flex flex-col gap-1">
+                <div className="w-8 h-8 rounded-lg bg-blue-50 text-primary flex items-center justify-center mb-1">
                   <ListChecks className="w-4 h-4" />
                 </div>
-                <span className="text-xl font-black">{stats.total}</span>
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">TOPLAM ADRES</span>
+                <span className="text-2xl font-black">{stats.total}</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Toplam Kayıt</span>
               </div>
-              <div className="ios-card p-5 flex flex-col items-center text-center gap-1">
-                <div className="p-2 rounded-full text-white mb-1 bg-green-500">
+              <div className="premium-card p-5 flex flex-col gap-1">
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center mb-1">
                   <CheckCircle className="w-4 h-4" />
                 </div>
-                <span className="text-xl font-black">{stats.visited}</span>
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">GİDİLEN ADRES</span>
+                <span className="text-2xl font-black">{stats.visited}</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Ziyaret Edilen</span>
+              </div>
+              <div className="hidden sm:flex premium-card p-5 flex-col gap-1">
+                <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center mb-1">
+                  <Filter className="w-4 h-4" />
+                </div>
+                <span className="text-2xl font-black">{Object.keys(groupedAddresses).length}</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Aktif Mahalle</span>
+              </div>
+              <div className="hidden sm:flex premium-card p-5 flex-col gap-1">
+                <div className="w-8 h-8 rounded-lg bg-slate-50 text-slate-600 flex items-center justify-center mb-1">
+                  <MapPin className="w-4 h-4" />
+                </div>
+                <span className="text-2xl font-black">{districts.length}</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">İlçe Sayısı</span>
               </div>
             </section>
 
+            {/* Filter Section */}
             <FilterBar
               districts={districts}
               neighborhoods={neighborhoodsForFilter}
@@ -211,66 +210,74 @@ export default function SahaNav() {
               onClear={() => { setSelectedDistrict("all"); setSelectedNeighborhood("all"); }}
             />
 
-            <Accordion type="multiple" className="space-y-4">
-              {Object.entries(groupedAddresses).map(([neighborhood, list]) => {
-                const isDone = list.every(a => a.visited) && list.length > 0;
-                return (
-                  <AccordionItem key={neighborhood} value={neighborhood} className={cn("ios-card px-4 border-none transition-all", isDone && "opacity-60")}>
-                    <AccordionTrigger className="hover:no-underline py-5">
-                      <div className="flex items-center gap-4 text-left">
-                        <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center", isDone ? "bg-green-500/10 text-green-600" : "bg-primary/10 text-primary")}>
-                          <LayoutGrid className="w-5 h-5" />
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="font-bold text-lg leading-tight">{neighborhood}</span>
-                          <span className="text-xs font-medium text-muted-foreground">{list.length} Adres</span>
-                        </div>
+            {/* Address List */}
+            <div className="space-y-4">
+              <Accordion type="multiple" className="space-y-6">
+                {Object.entries(groupedAddresses).map(([neighborhood, list]) => {
+                  const isDone = list.every(a => a.visited) && list.length > 0;
+                  return (
+                    <AccordionItem key={neighborhood} value={neighborhood} className={cn("border-none group")}>
+                      <div className={cn("premium-card overflow-hidden", isDone && "opacity-60")}>
+                        <AccordionTrigger className="hover:no-underline py-5 px-6">
+                          <div className="flex items-center gap-4 text-left">
+                            <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center transition-colors", isDone ? "bg-emerald-50 text-emerald-600" : "bg-slate-50 text-slate-600 group-hover:bg-primary/5 group-hover:text-primary")}>
+                              <LayoutGrid className="w-5 h-5" />
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="font-bold text-lg text-slate-900">{neighborhood}</span>
+                              <span className="text-xs font-semibold text-slate-400">{list.length} Adres</span>
+                            </div>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent className="px-6 pb-6 pt-2">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {list.map(addr => (
+                              <AddressCard 
+                                key={addr.id} 
+                                address={addr} 
+                                onToggleVisited={toggleVisited}
+                                onDelete={() => deleteAddress(addr.id)}
+                                isSelected={selectedRouteIds.includes(addr.id)}
+                                onToggleSelection={() => toggleRouteSelection(addr.id)}
+                                selectionOrder={selectedRouteIds.indexOf(addr.id) + 1}
+                              />
+                            ))}
+                          </div>
+                        </AccordionContent>
                       </div>
-                    </AccordionTrigger>
-                    <AccordionContent className="pb-6">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {list.map(addr => (
-                          <AddressCard 
-                            key={addr.id} 
-                            address={addr} 
-                            onToggleVisited={toggleVisited}
-                            onDelete={() => deleteAddress(addr.id)}
-                            isSelected={selectedRouteIds.includes(addr.id)}
-                            onToggleSelection={() => toggleRouteSelection(addr.id)}
-                            selectionOrder={selectedRouteIds.indexOf(addr.id) + 1}
-                          />
-                        ))}
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
-                );
-              })}
-            </Accordion>
+                    </AccordionItem>
+                  );
+                })}
+              </Accordion>
+            </div>
           </div>
         )}
       </div>
 
+      {/* Floating Action Bar */}
       {selectedRouteIds.length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 p-6 z-[60] bg-gradient-to-t from-background via-background/90 to-transparent">
-          <div className="max-w-4xl mx-auto">
+        <div className="fixed bottom-0 left-0 right-0 p-6 z-[60] bg-gradient-to-t from-background via-background/95 to-transparent">
+          <div className="max-w-xl mx-auto">
             <Button 
               disabled={selectedRouteIds.length < 2 || selectedRouteIds.length > 9}
               onClick={handleCreateRoute}
               className={cn(
-                "w-full h-16 rounded-2xl font-black text-lg ios-shadow transition-all active:scale-95 flex items-center justify-between px-8",
-                selectedRouteIds.length >= 2 && selectedRouteIds.length <= 9 ? "bg-primary" : "bg-muted text-muted-foreground"
+                "w-full h-16 rounded-3xl font-black text-lg shadow-2xl transition-all active:scale-95 flex items-center justify-between px-8",
+                selectedRouteIds.length >= 2 && selectedRouteIds.length <= 9 
+                  ? "bg-primary text-white hover:bg-primary/95" 
+                  : "bg-slate-100 text-slate-400"
               )}
             >
               <div className="flex items-center gap-3">
                 <Route className="w-6 h-6" />
-                <span>Seçilenleri Rota Yap</span>
+                <span>Rotayı Başlat</span>
               </div>
-              <div className="flex items-center gap-2 bg-white/20 px-4 py-1.5 rounded-full text-sm">
-                <span>{selectedRouteIds.length} Adres</span>
+              <div className="flex items-center gap-2 bg-white/20 backdrop-blur-md px-4 py-1.5 rounded-full text-sm">
+                <span>{selectedRouteIds.length} Durak</span>
               </div>
             </Button>
             {selectedRouteIds.length > 9 && (
-              <p className="text-center text-xs font-bold text-destructive mt-2 uppercase tracking-widest">En fazla 9 durak seçebilirsiniz</p>
+              <p className="text-center text-[10px] font-bold text-destructive mt-3 uppercase tracking-widest">En fazla 9 durak desteklenir</p>
             )}
           </div>
         </div>

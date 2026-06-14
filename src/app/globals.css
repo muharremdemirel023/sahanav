@@ -4,47 +4,26 @@
 
 @layer base {
   :root {
-    --background: 210 20% 98%;
-    --foreground: 226 71% 10%;
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
     --card: 0 0% 100%;
-    --card-foreground: 226 71% 10%;
+    --card-foreground: 222 47% 11%;
     --popover: 0 0% 100%;
-    --popover-foreground: 226 71% 10%;
-    --primary: 215 100% 50%; /* iOS Blue */
-    --primary-foreground: 0 0% 100%;
-    --secondary: 210 20% 95%;
-    --secondary-foreground: 226 71% 20%;
-    --muted: 210 20% 95%;
-    --muted-foreground: 226 20% 50%;
-    --accent: 215 100% 50%;
-    --accent-foreground: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 225 60% 38%; /* #27449B */
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222 47% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 225 60% 38%;
+    --accent-foreground: 222 47% 11.2%;
     --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --ring: 215 100% 50%;
-    --radius: 1.25rem;
-  }
-  .dark {
-    --background: 226 71% 2%;
-    --foreground: 0 0% 98%;
-    --card: 226 71% 5%;
-    --card-foreground: 0 0% 98%;
-    --popover: 226 71% 5%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 215 100% 60%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 226 30% 10%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 226 30% 10%;
-    --muted-foreground: 226 20% 60%;
-    --accent: 215 100% 60%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 226 30% 15%;
-    --input: 226 30% 15%;
-    --ring: 215 100% 60%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 225 60% 38%;
+    --radius: 1rem;
   }
 }
 
@@ -59,18 +38,29 @@
   }
 }
 
-.ios-glass {
-  @apply bg-white/70 backdrop-blur-xl border-white/20;
+.premium-card {
+  @apply bg-card border border-white/40 shadow-[0_8px_30px_rgb(0,0,0,0.04)] rounded-[1.25rem] transition-all duration-300;
 }
 
-.ios-shadow {
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.04);
+.premium-card:hover {
+  @apply shadow-[0_8px_40px_rgb(0,0,0,0.08)] -translate-y-0.5;
 }
 
-.ios-card {
-  @apply ios-shadow border bg-card rounded-[1.5rem] transition-all duration-300;
+.glass-header {
+  @apply bg-white/80 backdrop-blur-md border-b border-slate-200/50 sticky top-0 z-50;
 }
 
-.ios-button {
-  @apply rounded-full font-semibold transition-all active:scale-95;
+.action-button {
+  @apply rounded-full font-bold transition-all active:scale-95 disabled:opacity-50;
+}
+
+/* Custom scrollbar for a cleaner look */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-200 rounded-full hover:bg-slate-300;
 }

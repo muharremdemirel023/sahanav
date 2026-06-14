@@ -1,11 +1,9 @@
-
 "use client";
 
 import React from "react";
-import { MapPin, Navigation, CheckCircle2, ChevronRight, PlusCircle, CheckCircle, Trash2 } from "lucide-react";
+import { MapPin, Navigation, CheckCircle2, ChevronRight, CheckCircle, Trash2, Plus, Info } from "lucide-react";
 import type { ParsedAddress } from "@/types/address";
 import { Button } from "./ui/button";
-import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Checkbox } from "./ui/checkbox";
 import { cn } from "@/lib/utils";
@@ -27,61 +25,67 @@ export default function AddressCard({
   onToggleSelection,
   selectionOrder 
 }: AddressCardProps) {
-  const openInMaps = () => {
+  const openInMaps = (e: React.MouseEvent) => {
+    e.stopPropagation();
     const encoded = encodeURIComponent(address.streetQuery);
     const url = `https://www.google.com/maps/search/?api=1&query=${encoded}`;
     window.open(url, "_blank");
   };
 
   return (
-    <Card 
+    <div 
+      onClick={onToggleSelection}
       className={cn(
-        "p-6 flex flex-col gap-4 transition-all duration-300 border-none rounded-2xl bg-[#F9F9F9] group relative hover:bg-white ios-shadow",
-        address.visited && "opacity-70",
-        isSelected && "ring-2 ring-primary bg-primary/[0.02]"
+        "group relative p-5 flex flex-col gap-4 border border-slate-100 rounded-2xl transition-all duration-300 cursor-pointer",
+        "bg-slate-50/50 hover:bg-white hover:shadow-xl hover:shadow-slate-200/50",
+        isSelected ? "ring-2 ring-primary bg-primary/[0.02] border-primary/20 shadow-lg shadow-primary/5" : "",
+        address.visited && !isSelected && "opacity-60"
       )}
     >
-      <div 
-        onClick={onToggleSelection}
-        className={cn(
-          "absolute top-4 right-4 flex items-center justify-center cursor-pointer transition-all",
-          isSelected ? "scale-110" : "opacity-40 hover:opacity-100"
-        )}
-      >
+      {/* Route Selection Badge */}
+      <div className={cn(
+        "absolute -top-3 -right-3 w-8 h-8 rounded-full flex items-center justify-center border-2 border-white shadow-md transition-all z-10",
+        isSelected ? "bg-primary scale-110" : "bg-slate-200 opacity-0 group-hover:opacity-100"
+      )}>
         {isSelected ? (
-          <div className="relative">
-            <CheckCircle className="w-8 h-8 text-primary fill-primary/10" />
-            <span className="absolute inset-0 flex items-center justify-center text-[10px] font-black text-primary mt-0.5">
-              {selectionOrder}
-            </span>
-          </div>
+          <span className="text-white text-xs font-black">{selectionOrder}</span>
         ) : (
-          <PlusCircle className="w-8 h-8 text-muted-foreground" />
+          <Plus className="w-4 h-4 text-slate-500" />
         )}
       </div>
 
-      <div className="flex justify-between items-start gap-3 w-full pr-10">
-        <div className="flex items-start gap-4 flex-1 min-w-0">
-          <Checkbox 
-            id={`visited-${address.id}`}
-            checked={address.visited}
-            onCheckedChange={() => onToggleVisited(address.id)}
-            className="w-6 h-6 border-2 shrink-0 rounded-full transition-all data-[state=checked]:bg-green-500 data-[state=checked]:border-green-500"
-          />
+      <div className="flex justify-between items-start gap-4">
+        <div className="flex items-start gap-3 flex-1 min-w-0">
+          <div 
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleVisited(address.id);
+            }}
+            className="pt-1"
+          >
+            <Checkbox 
+              id={`visited-${address.id}`}
+              checked={address.visited}
+              className={cn(
+                "w-5 h-5 border-2 rounded-md transition-all",
+                "data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"
+              )}
+            />
+          </div>
           <div className="flex flex-col min-w-0 flex-1">
             <h4 className={cn(
-              "font-bold text-lg leading-tight text-foreground line-clamp-2",
-              address.visited && "line-through text-muted-foreground"
+              "font-bold text-slate-900 leading-tight transition-all",
+              address.visited && "text-slate-400 line-through decoration-emerald-500/30"
             )}>
               {address.businessName}
             </h4>
-            <div className="flex items-center gap-2 mt-1">
-              <Badge variant="secondary" className="bg-blue-500/10 text-blue-600 text-[10px] font-bold border-none">
+            <div className="flex items-center gap-2 mt-2">
+              <Badge variant="secondary" className="bg-primary/5 text-primary text-[10px] font-bold border-none h-5">
                 {address.district}
               </Badge>
               {address.visited && (
-                <span className="text-[10px] font-bold text-green-600 flex items-center">
-                  <CheckCircle2 className="w-3 h-3 mr-1" /> Gidildi
+                <span className="text-[10px] font-bold text-emerald-600 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" /> Gidildi
                 </span>
               )}
             </div>
@@ -89,41 +93,42 @@ export default function AddressCard({
         </div>
       </div>
 
-      <div className="space-y-3">
-        <div className="flex items-start gap-2 text-sm text-muted-foreground">
-          <MapPin className="w-4 h-4 mt-0.5 shrink-0 text-primary" />
-          <div className="leading-snug min-w-0 flex-1">
-            <span className="font-bold block text-foreground mb-0.5">
-              {address.neighborhood} Mah.
-            </span>
-            <p className="text-xs text-muted-foreground">
+      <div className="space-y-3 bg-white/50 p-3 rounded-xl border border-slate-100/50">
+        <div className="flex items-start gap-3">
+          <div className="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
+            <MapPin className="w-3.5 h-3.5 text-slate-500" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-tighter block mb-0.5">Adres Detayı</span>
+            <p className="text-xs text-slate-600 leading-relaxed line-clamp-2">
               {address.fullAddress}
             </p>
           </div>
         </div>
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex gap-2 mt-auto">
         <Button
           onClick={openInMaps}
-          className="flex-1 h-11 rounded-xl font-bold flex items-center justify-between px-4 bg-white text-primary border border-primary/20 hover:bg-primary/5 active:scale-95"
+          variant="outline"
+          className="flex-1 h-10 rounded-xl font-bold text-xs bg-white text-primary border-primary/20 hover:bg-primary/5 hover:border-primary/40 transition-all flex items-center justify-center gap-2"
         >
-          <span className="flex items-center gap-2">
-            <Navigation className="w-4 h-4" />
-            Haritada Aç
-          </span>
-          <ChevronRight className="w-4 h-4 opacity-50" />
+          <Navigation className="w-3.5 h-3.5" />
+          Navigasyon
         </Button>
         {onDelete && (
           <Button
             variant="ghost"
-            onClick={onDelete}
-            className="h-11 w-11 rounded-xl text-destructive hover:bg-destructive/5 shrink-0"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            className="h-10 w-10 rounded-xl text-slate-300 hover:text-destructive hover:bg-destructive/5 transition-colors"
           >
-            <Trash2 className="w-5 h-5" />
+            <Trash2 className="w-4 h-4" />
           </Button>
         )}
       </div>
-    </Card>
+    </div>
   );
 }
