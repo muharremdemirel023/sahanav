@@ -11,40 +11,132 @@ function generateId(): string {
   return 'id-' + Math.random().toString(36).substring(2, 11) + '-' + Date.now().toString(36);
 }
 
+const SAHANAV_NEIGHBORHOOD_PREFIXES = ["YENİ", "ESKİ", "YUKARI", "AŞAĞI", "BÜYÜK", "KÜÇÜK", "ORTA"];
+const SAHANAV_NEIGHBORHOOD_STOP_WORDS = new Set([
+  'ADRES',
+  'NO',
+  'BLK',
+  'BLOK',
+  'DAİRE',
+  'DAIRE',
+  'D',
+  'CAD',
+  'CADDE',
+  'CADDESİ',
+  'CD',
+  'SOK',
+  'SOKAK',
+  'SK',
+  'MAH',
+  'MH',
+  'MAHALLE',
+  'MAHALLESİ',
+]);
+
+function normalizeSahaNavTurkishText(value: string): string {
+  return value
+    .toLocaleUpperCase('tr')
+    .replace(/İ/g, 'I')
+    .replace(/I/g, 'I')
+    .replace(/ı/g, 'I')
+    .replace(/Ş/g, 'S')
+    .replace(/Ğ/g, 'G')
+    .replace(/Ü/g, 'U')
+    .replace(/Ö/g, 'O')
+    .replace(/Ç/g, 'C')
+    .replace(/Ä°/g, 'I')
+    .replace(/Ä±/g, 'I')
+    .replace(/Å/g, 'S')
+    .replace(/Ä/g, 'G')
+    .replace(/Ãœ/g, 'U')
+    .replace(/Ã–/g, 'O')
+    .replace(/Ã‡/g, 'C');
+}
+
+function stripSahaNavDirtyAddressFragments(value: string): string {
+  return value
+    .replace(/\b(?:D|NO|N)\s*:\s*\d+(?=[A-ZÇĞİÖŞÜ])/giu, ' ')
+    .replace(/\b(?:BLK|BLOK)\s*:?\s*/giu, ' ')
+    .replace(/\b(?:İÇ\s*KAPI|IC\s*KAPI)\b/giu, ' ')
+    .replace(/\b(?:DAİRE|DAIRE|D|KAPI|NO|NUMARA|N)\s*:?\s*\d+[A-ZÇĞİÖŞÜ]*/giu, ' ')
+    .replace(/[.\-_/]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function splitSahaNavKnownCompounds(value: string): string {
+  return value
+    .replace(/\b[AB](?=ATAKENT|ATATÜRK|ATATURK|İSTİKLAL|ISTIKLAL|YUKARI)/g, '')
+    .replace(/\bYUKARIDUDULLU\b/g, 'YUKARI DUDULLU')
+    .replace(/\bASAGIDUDULLU\b/g, 'ASAGI DUDULLU')
+    .replace(/\bAŞAĞIDUDULLU\b/g, 'AŞAĞI DUDULLU')
+    .replace(/\bALTINSEHIR\b/g, 'ALTIN SEHIR')
+    .replace(/\bALTINŞEHİR\b/g, 'ALTIN ŞEHİR');
+}
+
+function isSahaNavMeaningfulNeighborhoodToken(token: string): boolean {
+  const normalized = normalizeSahaNavTurkishText(token.replace(/[:.]/g, ''));
+  if (!normalized || normalized.length < 2) return false;
+  if (/^\d+$/.test(normalized)) return false;
+  return !SAHANAV_NEIGHBORHOOD_STOP_WORDS.has(normalized);
+}
+
+function cleanSahaNavNeighborhoodCandidate(value: string): string {
+  let cleaned = stripSahaNavDirtyAddressFragments(value)
+    .replace(/\b(?:MAHALLESI|MAHALLESİ|MAHALLE|MAH|MH|M)\b/giu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  cleaned = splitSahaNavKnownCompounds(cleaned.toLocaleUpperCase('tr'));
+
+  const tokens = cleaned.split(/\s+/).filter(isSahaNavMeaningfulNeighborhoodToken);
+  if (tokens.length === 0) return '';
+
+  const normalizedTokens = tokens.map(normalizeSahaNavTurkishText);
+  const normalizedPrefixes = SAHANAV_NEIGHBORHOOD_PREFIXES.map(normalizeSahaNavTurkishText);
+  let prefixIndex = -1;
+  for (let index = normalizedTokens.length - 1; index >= 0; index--) {
+    if (normalizedPrefixes.includes(normalizedTokens[index])) {
+      prefixIndex = index;
+      break;
+    }
+  }
+
+  if (prefixIndex >= 0 && tokens[prefixIndex + 1]) {
+    return tokens.slice(prefixIndex, prefixIndex + 2).join(' ');
+  }
+
+  return tokens.slice(Math.max(0, tokens.length - 3)).join(' ').replace(/^\s*ADRES\s*:?\s*/i, '').trim();
+}
+
 /**
  * Mahalle ismini temizler ve normalize eder.
  */
 export function extractNeighborhood(addressLine: string): string | null {
   if (!addressLine) return null;
-  const normalizedLine = addressLine.replace(/\s+/g, ' ').trim();
+  const normalizedLine = stripSahaNavDirtyAddressFragments(addressLine).replace(/\s+/g, ' ').trim();
   const upperLine = normalizedLine.toUpperCase();
   
   // Mahalle anahtar kelimesini bul
-  const mahIndex = upperLine.indexOf(" MAH");
+  const neighborhoodSuffixMatch = upperLine.match(/\s(?:M|MH|MAH|MAHALLE|MAHALLESİ|MAHALLESI)\.?\b/);
+  const mahIndex = neighborhoodSuffixMatch?.index ?? -1;
   if (mahIndex === -1) return null;
 
   // Mahalle isminden önceki kısmı al (genelde adresin başı veya cadde sonudur)
   let neighborhoodPart = normalizedLine.substring(0, mahIndex).trim();
   
   // Mahalle isminden önce gelebilecek kapı no, bina no gibi sayısal gürültüleri temizle
-  neighborhoodPart = neighborhoodPart.replace(/(?:NO[:\/\-\s]*\d+[A-Z]?)/gi, '');
+  neighborhoodPart = cleanSahaNavNeighborhoodCandidate(neighborhoodPart);
   
-  // En sondaki kelimeyi al (Mahalle ismi genelde budur)
-  const words = neighborhoodPart.trim().split(/\s+/);
-  if (words.length === 0) return null;
-
-  const prefixes = ["YENİ", "ESKİ", "YUKARI", "AŞAĞI", "BÜYÜK", "KÜÇÜK", "ORTA"];
-  const lastWord = words[words.length - 1].toUpperCase();
-  const prevWord = words.length > 1 ? words[words.length - 2].toUpperCase() : "";
-
-  let result = lastWord;
-  // Örn: "YENİ MAHALLE"
-  if (prefixes.includes(prevWord)) {
-    result = `${prevWord} ${lastWord}`;
-  }
+  const result = neighborhoodPart.trim();
 
   // Temizlik: Sayıları ve çok kısa kelimeleri ele
-  if (result.length > 2 && result.length < 35 && !/^\d+$/.test(result)) {
+  if (
+    result.length > 2 &&
+    result.length < 35 &&
+    !/^\d+$/.test(result) &&
+    result.split(/\s+/).some(isSahaNavMeaningfulNeighborhoodToken)
+  ) {
     return result;
   }
   return null;
@@ -172,18 +264,69 @@ export function deduplicateAddresses(addresses: ParsedAddress[]): ParsedAddress[
   });
 }
 
+const SAHANAV_UNKNOWN_NEIGHBORHOOD_KEY = 'BILINMEYEN';
+
+function normalizeSahaNavGroupKey(value: string): string {
+  return cleanSahaNavNeighborhoodCandidate(value)
+    .toLocaleUpperCase('tr')
+    .replace(/İ/g, 'I')
+    .replace(/I/g, 'I')
+    .replace(/ı/g, 'I')
+    .replace(/Ş/g, 'S')
+    .replace(/Ğ/g, 'G')
+    .replace(/Ü/g, 'U')
+    .replace(/Ö/g, 'O')
+    .replace(/Ç/g, 'C')
+    .replace(/[.\-_/]+/g, ' ')
+    .replace(/\b(?:MAHALLESI|MAHALLESİ|MAHALLE|MAH|MH|M)\b/g, ' ')
+    .replace(/\b(?:CADDESI|CADDESİ|CADDE|CAD|CD|C)\b/g, ' CADDE ')
+    .replace(/\b(?:SOKAK|SOK|SK|S)\b/g, ' SOKAK ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\s+/g, '');
+}
+
+function cleanSahaNavNeighborhoodTitle(value: string): string {
+  const cleaned = cleanSahaNavNeighborhoodCandidate(value)
+    .replace(/[.\-_/]+/g, ' ')
+    .replace(/\b(?:MAHALLESI|MAHALLESİ|MAHALLE|MAH|MH|M)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return cleaned ? `${cleaned.toLocaleUpperCase('tr')} MAH.` : "MAHALLE BELİRSİZ";
+}
+
+function scoreSahaNavDisplayTitle(title: string): number {
+  const turkishCharScore = (title.match(/[ÇĞİÖŞÜçğıöşü]/g) ?? []).length * 10;
+  const readableSpacingScore = /\S+\s+\S+/.test(title.replace(/\bMAH\.$/, '').trim()) ? 5 : 0;
+  return turkishCharScore + readableSpacingScore + Math.min(title.length, 40) / 100;
+}
+
 export function groupAddressesByNeighborhood(addresses: ParsedAddress[]): Record<string, ParsedAddress[]> {
-  const groups: Record<string, ParsedAddress[]> = {};
+  const groups: Record<string, { title: string; addresses: ParsedAddress[] }> = {};
+
   addresses.forEach((addr) => {
-    const name = addr.neighborhood && addr.neighborhood !== 'BİLİNMEYEN' ? addr.neighborhood.trim().toUpperCase() : null;
-    const key = name ? `${name} MAH.` : "MAHALLE BELİRSİZ";
-    if (!groups[key]) groups[key] = [];
-    groups[key].push(addr);
+    const rawName = addr.neighborhood?.trim();
+    const normalizedName = rawName ? normalizeSahaNavGroupKey(rawName) : '';
+    const hasKnownName = normalizedName && normalizedName !== SAHANAV_UNKNOWN_NEIGHBORHOOD_KEY;
+    const key = hasKnownName ? normalizedName : "MAHALLE BELIRSIZ";
+    const title = hasKnownName ? cleanSahaNavNeighborhoodTitle(rawName) : "MAHALLE BELİRSİZ";
+
+    if (!groups[key]) {
+      groups[key] = { title, addresses: [] };
+    } else if (scoreSahaNavDisplayTitle(title) > scoreSahaNavDisplayTitle(groups[key].title)) {
+      groups[key].title = title;
+    }
+
+    groups[key].addresses.push(addr);
   });
-  
+
   const sorted: Record<string, ParsedAddress[]> = {};
-  Object.keys(groups).sort().forEach(k => {
-    sorted[k] = groups[k].sort((a, b) => a.businessName.localeCompare(b.businessName, 'tr'));
-  });
+  Object.values(groups)
+    .sort((a, b) => a.title.localeCompare(b.title, 'tr'))
+    .forEach((group) => {
+      sorted[group.title] = group.addresses.sort((a, b) => a.businessName.localeCompare(b.businessName, 'tr'));
+    });
+
   return sorted;
 }
